@@ -65,7 +65,7 @@ public class ProtobufSpringEncoderTest {
 	private HttpClient httpClient;
 
 	// a protobuf object with some content
-	private org.springframework.cloud.openfeign.encoding.proto.Request request = org.springframework.cloud.openfeign.encoding.proto.Request
+	private Request request = Request
 			.newBuilder().setId(1000000).setMsg("Erlang/OTP 最初是爱立信为开发电信设备系统设计的编程语言平台，"
 					+ "电信设备(路由器、接入网关、…)典型设计是通过背板连接主控板卡与多块业务板卡的分布式系统。")
 			.build();
@@ -79,7 +79,7 @@ public class ProtobufSpringEncoderTest {
 		byte[] bytes = read(entity.getContent(), (int) entity.getContentLength());
 
 		assertThat(this.request.toByteArray()).isEqualTo(bytes);
-		org.springframework.cloud.openfeign.encoding.proto.Request copy = org.springframework.cloud.openfeign.encoding.proto.Request
+		Request copy = Request
 				.parseFrom(bytes);
 		assertThat(copy).isEqualTo(this.request);
 	}
@@ -98,7 +98,7 @@ public class ProtobufSpringEncoderTest {
 		// http request-body is different with original protobuf body
 		assertThat(this.request.toByteArray().length).isNotEqualTo(bytes.length);
 		try {
-			org.springframework.cloud.openfeign.encoding.proto.Request copy = org.springframework.cloud.openfeign.encoding.proto.Request
+			Request copy = Request
 					.parseFrom(bytes);
 			fail("Expected an InvalidProtocolBufferException to be thrown");
 		}

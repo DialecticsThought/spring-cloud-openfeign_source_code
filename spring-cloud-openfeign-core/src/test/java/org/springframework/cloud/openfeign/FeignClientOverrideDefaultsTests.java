@@ -217,7 +217,7 @@ class FeignClientOverrideDefaultsTests {
 
 		@Bean
 		public QueryMapEncoder queryMapEncoder() {
-			return new feign.QueryMapEncoder.Default();
+			return new QueryMapEncoder.Default();
 		}
 
 	}

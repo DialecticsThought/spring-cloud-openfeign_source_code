@@ -33,11 +33,18 @@ import org.springframework.context.annotation.Import;
  * @author Olga Maciaszek-Sharma
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(OkHttpClient.class)
-@ConditionalOnProperty("feign.okhttp.enabled")
+@ConditionalOnClass(OkHttpClient.class)// 表示此时在Spring容器中没有Client实现类bean对象，也就是程序员没有自动在某个配置类中声明一个Client的实现类(一般我们也不会这么做)
+@ConditionalOnProperty("feign.okhttp.enabled")// 表示引入了OkHttp相关的依赖，才会有OkHttpClient.class
 @Import(OkHttpFeignConfiguration.class)
 class OkHttpFeignLoadBalancedConfiguration {
 
+	/**
+	 *
+	 * @param cachingFactory  TODO 进入
+	 * @param clientFactory 类似FeignContext，是ribbon获取其组件的一个上下文 这两个类的父类都是NamedContextFactory
+	 * @param okHttpClient  真正发起远程调用的的http 客户端
+	 * @return
+	 */
 	@Bean
 	@ConditionalOnMissingBean(Client.class)
 	public Client feignClient(CachingSpringLoadBalancerFactory cachingFactory,

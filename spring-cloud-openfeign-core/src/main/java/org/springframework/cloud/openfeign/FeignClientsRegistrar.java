@@ -65,7 +65,7 @@ import org.springframework.util.StringUtils;
  * @author Olga Maciaszek-Sharma
  */
 class FeignClientsRegistrar
-		implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
+	implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
 
 	// patterned after Spring Integration IntegrationComponentScanRegistrar
 	// and RibbonClientsConfigurationRegistgrar
@@ -79,12 +79,12 @@ class FeignClientsRegistrar
 
 	static void validateFallback(final Class clazz) {
 		Assert.isTrue(!clazz.isInterface(),
-				"Fallback class must implement the interface annotated by @FeignClient");
+			"Fallback class must implement the interface annotated by @FeignClient");
 	}
 
 	static void validateFallbackFactory(final Class clazz) {
 		Assert.isTrue(!clazz.isInterface(), "Fallback factory must produce instances "
-				+ "of fallback classes that implement the interface annotated by @FeignClient");
+			+ "of fallback classes that implement the interface annotated by @FeignClient");
 	}
 
 	static String getName(String name) {
@@ -97,14 +97,12 @@ class FeignClientsRegistrar
 			String url;
 			if (!name.startsWith("http://") && !name.startsWith("https://")) {
 				url = "http://" + name;
-			}
-			else {
+			} else {
 				url = name;
 			}
 			host = new URI(url).getHost();
 
-		}
-		catch (URISyntaxException e) {
+		} catch (URISyntaxException e) {
 		}
 		Assert.state(host != null, "Service id not legal hostname (" + name + ")");
 		return name;
@@ -117,8 +115,7 @@ class FeignClientsRegistrar
 			}
 			try {
 				new URL(url);
-			}
-			catch (MalformedURLException e) {
+			} catch (MalformedURLException e) {
 				throw new IllegalArgumentException(url + " is malformed", e);
 			}
 		}
@@ -145,47 +142,55 @@ class FeignClientsRegistrar
 
 	@Override
 	public void registerBeanDefinitions(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+										BeanDefinitionRegistry registry) {
+
+		// 注册配置 TODO 进入
 		registerDefaultConfiguration(metadata, registry);
+
+		// 注册 FeignClient TODO 进入
 		registerFeignClients(metadata, registry);
 	}
 
 	private void registerDefaultConfiguration(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+											  BeanDefinitionRegistry registry) {
+
 		Map<String, Object> defaultAttrs = metadata
-				.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
+			.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
 
 		if (defaultAttrs != null && defaultAttrs.containsKey("defaultConfiguration")) {
 			String name;
 			if (metadata.hasEnclosingClass()) {
 				name = "default." + metadata.getEnclosingClassName();
-			}
-			else {
+			} else {
 				name = "default." + metadata.getClassName();
 			}
 			registerClientConfiguration(registry, name,
-					defaultAttrs.get("defaultConfiguration"));
+				defaultAttrs.get("defaultConfiguration"));
 		}
 	}
 
 	public void registerFeignClients(AnnotationMetadata metadata,
-			BeanDefinitionRegistry registry) {
+									 BeanDefinitionRegistry registry) {
 
 		LinkedHashSet<BeanDefinition> candidateComponents = new LinkedHashSet<>();
+		// 解析 @EnableFeginClient注解
 		Map<String, Object> attrs = metadata
-				.getAnnotationAttributes(EnableFeignClients.class.getName());
+			.getAnnotationAttributes(EnableFeignClients.class.getName());
+		// 一般不会指明哪一些client 会指明一个包路径 让程序去扫描包下的接口 生成代理对象 注册到spring容器
 		final Class<?>[] clients = attrs == null ? null
-				: (Class<?>[]) attrs.get("clients");
+			: (Class<?>[]) attrs.get("clients");
 		if (clients == null || clients.length == 0) {
+			// 得到 包扫描类 并将包含的规则设置到它的属性汇总
 			ClassPathScanningCandidateComponentProvider scanner = getScanner();
 			scanner.setResourceLoader(this.resourceLoader);
+			// 在new一个 AnnotationTypeFilter有一点多余 上面创建过
 			scanner.addIncludeFilter(new AnnotationTypeFilter(FeignClient.class));
 			Set<String> basePackages = getBasePackages(metadata);
+			// 遍历传入的保丽净 得到扫描之后的结果集合 设置到CandidateComponents
 			for (String basePackage : basePackages) {
 				candidateComponents.addAll(scanner.findCandidateComponents(basePackage));
 			}
-		}
-		else {
+		} else {
 			for (Class<?> clazz : clients) {
 				candidateComponents.add(new AnnotatedGenericBeanDefinition(clazz));
 			}
@@ -196,27 +201,33 @@ class FeignClientsRegistrar
 				// verify annotated class is an interface
 				AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
 				AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
+				// 检查client是否是接口 不是抛异常
 				Assert.isTrue(annotationMetadata.isInterface(),
-						"@FeignClient can only be specified on an interface");
-
+					"@FeignClient can only be specified on an interface");
+				// 得到client @FeignCLient 注解信息
 				Map<String, Object> attributes = annotationMetadata
-						.getAnnotationAttributes(FeignClient.class.getCanonicalName());
-
+					.getAnnotationAttributes(FeignClient.class.getCanonicalName());
+				// 得到client的name属性 如果@FeignClient上有设置的话
 				String name = getClientName(attributes);
+				// 得到client的configuration属性 如果@FeignClient上有设置的话 并注册到spring容器
 				registerClientConfiguration(registry, name,
-						attributes.get("configuration"));
-
+					attributes.get("configuration"));
+				//client注册核心 TODO 进入
 				registerFeignClient(registry, annotationMetadata, attributes);
 			}
 		}
 	}
 
 	private void registerFeignClient(BeanDefinitionRegistry registry,
-			AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
+									 AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
 		String className = annotationMetadata.getClassName();
+		/**
+		 * 实际上往 spring容器 中 注册的是 FeignClientFactoryBean对象 即 factoryBean
+		 * 并设置beanClass 为 client接口的class 查看FeignClientFactoryBean.getBean()方法 TODO
+		 */
 		Class clazz = ClassUtils.resolveClassName(className, null);
 		ConfigurableBeanFactory beanFactory = registry instanceof ConfigurableBeanFactory
-				? (ConfigurableBeanFactory) registry : null;
+			? (ConfigurableBeanFactory) registry : null;
 		String contextId = getContextId(beanFactory, attributes);
 		String name = getName(attributes);
 		FeignClientFactoryBean factoryBean = new FeignClientFactoryBean();
@@ -225,26 +236,31 @@ class FeignClientsRegistrar
 		factoryBean.setContextId(contextId);
 		factoryBean.setType(clazz);
 		BeanDefinitionBuilder definition = BeanDefinitionBuilder
-				.genericBeanDefinition(clazz, () -> {
-					factoryBean.setUrl(getUrl(beanFactory, attributes));
-					factoryBean.setPath(getPath(beanFactory, attributes));
-					factoryBean.setDecode404(Boolean
-							.parseBoolean(String.valueOf(attributes.get("decode404"))));
-					Object fallback = attributes.get("fallback");
-					if (fallback != null) {
-						factoryBean.setFallback(fallback instanceof Class
-								? (Class<?>) fallback
-								: ClassUtils.resolveClassName(fallback.toString(), null));
-					}
-					Object fallbackFactory = attributes.get("fallbackFactory");
-					if (fallbackFactory != null) {
-						factoryBean.setFallbackFactory(fallbackFactory instanceof Class
-								? (Class<?>) fallbackFactory
-								: ClassUtils.resolveClassName(fallbackFactory.toString(),
-										null));
-					}
-					return factoryBean.getObject();
-				});
+			.genericBeanDefinition(clazz, () -> {
+
+				factoryBean.setUrl(getUrl(beanFactory, attributes));
+
+				factoryBean.setPath(getPath(beanFactory, attributes));
+
+				factoryBean.setDecode404(Boolean
+					.parseBoolean(String.valueOf(attributes.get("decode404"))));
+
+				Object fallback = attributes.get("fallback");
+				if (fallback != null) {
+					factoryBean.setFallback(fallback instanceof Class
+						? (Class<?>) fallback
+						: ClassUtils.resolveClassName(fallback.toString(), null));
+				}
+
+				Object fallbackFactory = attributes.get("fallbackFactory");
+				if (fallbackFactory != null) {
+					factoryBean.setFallbackFactory(fallbackFactory instanceof Class
+						? (Class<?>) fallbackFactory
+						: ClassUtils.resolveClassName(fallbackFactory.toString(),
+						null));
+				}
+				return factoryBean.getObject();
+			});
 		definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
 		definition.setLazyInit(true);
 		validate(attributes);
@@ -260,11 +276,12 @@ class FeignClientsRegistrar
 
 		String[] qualifiers = getQualifiers(attributes);
 		if (ObjectUtils.isEmpty(qualifiers)) {
-			qualifiers = new String[] { contextId + "FeignClient" };
+			qualifiers = new String[]{contextId + "FeignClient"};
 		}
 
 		BeanDefinitionHolder holder = new BeanDefinitionHolder(beanDefinition, className,
-				qualifiers);
+			qualifiers);
+		// 将FeignClientFactoryBean 对象注册到容器
 		BeanDefinitionReaderUtils.registerBeanDefinition(holder, registry);
 	}
 
@@ -293,7 +310,7 @@ class FeignClientsRegistrar
 	}
 
 	private String getContextId(ConfigurableBeanFactory beanFactory,
-			Map<String, Object> attributes) {
+								Map<String, Object> attributes) {
 		String contextId = (String) attributes.get("contextId");
 		if (!StringUtils.hasText(contextId)) {
 			return getName(attributes);
@@ -314,19 +331,19 @@ class FeignClientsRegistrar
 				return resolved;
 			}
 			return String.valueOf(resolver.evaluate(resolved,
-					new BeanExpressionContext(beanFactory, null)));
+				new BeanExpressionContext(beanFactory, null)));
 		}
 		return value;
 	}
 
 	private String getUrl(ConfigurableBeanFactory beanFactory,
-			Map<String, Object> attributes) {
+						  Map<String, Object> attributes) {
 		String url = resolve(beanFactory, (String) attributes.get("url"));
 		return getUrl(url);
 	}
 
 	private String getPath(ConfigurableBeanFactory beanFactory,
-			Map<String, Object> attributes) {
+						   Map<String, Object> attributes) {
 		String path = resolve(beanFactory, (String) attributes.get("path"));
 		return getPath(path);
 	}
@@ -335,7 +352,7 @@ class FeignClientsRegistrar
 		return new ClassPathScanningCandidateComponentProvider(false, this.environment) {
 			@Override
 			protected boolean isCandidateComponent(
-					AnnotatedBeanDefinition beanDefinition) {
+				AnnotatedBeanDefinition beanDefinition) {
 				boolean isCandidate = false;
 				if (beanDefinition.getMetadata().isIndependent()) {
 					if (!beanDefinition.getMetadata().isAnnotation()) {
@@ -349,7 +366,7 @@ class FeignClientsRegistrar
 
 	protected Set<String> getBasePackages(AnnotationMetadata importingClassMetadata) {
 		Map<String, Object> attributes = importingClassMetadata
-				.getAnnotationAttributes(EnableFeignClients.class.getCanonicalName());
+			.getAnnotationAttributes(EnableFeignClients.class.getCanonicalName());
 
 		Set<String> basePackages = new HashSet<>();
 		for (String pkg : (String[]) attributes.get("value")) {
@@ -368,7 +385,7 @@ class FeignClientsRegistrar
 
 		if (basePackages.isEmpty()) {
 			basePackages.add(
-					ClassUtils.getPackageName(importingClassMetadata.getClassName()));
+				ClassUtils.getPackageName(importingClassMetadata.getClassName()));
 		}
 		return basePackages;
 	}
@@ -389,7 +406,7 @@ class FeignClientsRegistrar
 			return null;
 		}
 		List<String> qualifierList = new ArrayList<>(
-				Arrays.asList((String[]) client.get("qualifiers")));
+			Arrays.asList((String[]) client.get("qualifiers")));
 		qualifierList.removeIf(qualifier -> !StringUtils.hasText(qualifier));
 		if (qualifierList.isEmpty() && getQualifier(client) != null) {
 			qualifierList = Collections.singletonList(getQualifier(client));
@@ -416,18 +433,18 @@ class FeignClientsRegistrar
 		}
 
 		throw new IllegalStateException("Either 'name' or 'value' must be provided in @"
-				+ FeignClient.class.getSimpleName());
+			+ FeignClient.class.getSimpleName());
 	}
 
 	private void registerClientConfiguration(BeanDefinitionRegistry registry, Object name,
-			Object configuration) {
+											 Object configuration) {
 		BeanDefinitionBuilder builder = BeanDefinitionBuilder
-				.genericBeanDefinition(FeignClientSpecification.class);
+			.genericBeanDefinition(FeignClientSpecification.class);
 		builder.addConstructorArgValue(name);
 		builder.addConstructorArgValue(configuration);
 		registry.registerBeanDefinition(
-				name + "." + FeignClientSpecification.class.getSimpleName(),
-				builder.getBeanDefinition());
+			name + "." + FeignClientSpecification.class.getSimpleName(),
+			builder.getBeanDefinition());
 	}
 
 	@Override

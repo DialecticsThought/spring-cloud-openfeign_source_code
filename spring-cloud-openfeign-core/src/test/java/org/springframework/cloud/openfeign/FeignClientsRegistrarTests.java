@@ -124,7 +124,7 @@ public class FeignClientsRegistrarTests {
 
 	@Configuration(proxyBeanMethods = false)
 	@EnableAutoConfiguration
-	@EnableFeignClients(clients = { FeignClientsRegistrarTests.FallbackClient.class })
+	@EnableFeignClients(clients = { FallbackClient.class })
 	protected static class FallbackTestConfig {
 
 	}
@@ -132,7 +132,7 @@ public class FeignClientsRegistrarTests {
 	@Configuration(proxyBeanMethods = false)
 	@EnableAutoConfiguration
 	@EnableFeignClients(
-			clients = { FeignClientsRegistrarTests.FallbackFactoryClient.class })
+			clients = { FallbackFactoryClient.class })
 	protected static class FallbackFactoryTestConfig {
 
 	}

@@ -42,6 +42,8 @@ import org.springframework.context.annotation.Primary;
  * @author Dave Syer
  * @author Olga Maciaszek-Sharma
  * @author Nguyen Ky Thanh
+ *
+ * FeignRibbonClientAutoConfiguration是在spring.factories中定义好了，Spring Boot在启动的时候就会加载该类(Spring Boot框架的SPI机制)
  */
 @ConditionalOnClass({ ILoadBalancer.class, Feign.class })
 @ConditionalOnProperty(value = "spring.cloud.loadbalancer.ribbon.enabled",
@@ -57,7 +59,16 @@ import org.springframework.context.annotation.Primary;
 		HttpClient5FeignLoadBalancedConfiguration.class,
 		DefaultFeignLoadBalancedConfiguration.class })
 public class FeignRibbonClientAutoConfiguration {
-
+	/**
+	 * TODO FeignRibbonClientAutoConfiguration中有两个方法都会返回CachingSpringLoadBalancerFactory，
+	 * 当然其中只会有一个生效，依据方法上的条件注解，这两个方法返回的CachingSpringLoadBalancerFactory对象，
+	 * 一个带有重试功能，另一个则没有
+	 *
+	 * 假设我们没有引入org.springframework.retry.support.RetryTemplate相关的依赖的话，
+	 * 那Spring最终调用的就是FeignRibbonClientAutoConfiguration#cachingLBClientFactory()方法，得到的CachingSpringLoadBalancerFactory对象
+	 * @param factory
+	 * @return
+	 */
 	@Bean
 	@Primary
 	@ConditionalOnMissingBean

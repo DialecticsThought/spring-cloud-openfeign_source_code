@@ -34,10 +34,10 @@ class HystrixTargeter implements Targeter {
 	@Override
 	public <T> T target(FeignClientFactoryBean factory, Feign.Builder feign,
 			FeignContext context, Target.HardCodedTarget<T> target) {
-		if (!(feign instanceof feign.hystrix.HystrixFeign.Builder)) {
+		if (!(feign instanceof HystrixFeign.Builder)) {
 			return feign.target(target);
 		}
-		feign.hystrix.HystrixFeign.Builder builder = (feign.hystrix.HystrixFeign.Builder) feign;
+		HystrixFeign.Builder builder = (HystrixFeign.Builder) feign;
 		String name = StringUtils.isEmpty(factory.getContextId()) ? factory.getName()
 				: factory.getContextId();
 		SetterFactory setterFactory = getOptional(name, context, SetterFactory.class);
