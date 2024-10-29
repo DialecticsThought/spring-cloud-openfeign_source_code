@@ -112,6 +112,11 @@ public class FeignClientFactoryBean implements FactoryBean<Object>, Initializing
 		Assert.hasText(name, "Name must be set");
 	}
 
+	/**
+	 * TODO 查看Feign项目的下面的Builder类  ，查看feign-self项目
+	 * @param context
+	 * @return
+	 */
 	protected Feign.Builder feign(FeignContext context) {
 		// 传入类型 从Spring容器中拿到对应的context 并设置到builder中
 		FeignLoggerFactory loggerFactory = get(context, FeignLoggerFactory.class);
@@ -310,27 +315,25 @@ public class FeignClientFactoryBean implements FactoryBean<Object>, Initializing
 
 	/**
 	 * TODO 来自org.springframework.cloud.openfeign.FeignClientFactoryBean#feign(org.springframework.cloud.openfeign.FeignContext)
+	 * TODO Spring Cloud 为每个 Feign 客户端创建了独立的上下文，用于管理客户端特定的配置和 Bean。
+	 * 		FeignContext 是 NamedContextFactory 的一个扩展，负责管理 Feign 客户端的上下文。
 	 *
-	 * @param context
-	 * @param type
+	 * @param context 是在Spring启动的时候通过FeignAutoConfiguration注入容器的 用于管理 Feign 客户端的上下文
+	 * @param type    目标 Bean 的类型
 	 * @param <T>
 	 * @return
 	 */
 	protected <T> T get(FeignContext context, Class<T> type) {
 		/**
-		 * TODO 进入该方法
-		 * 本质是org.springframework.cloud.context.named.NamedContextFactory.getInstance(java.lang.String, java.lang.Class<T>)
-		 * 在NamedContextFactory#getContext()方法中，会先去成员属性 Map<String, AnnotationConfigApplicationContext> contexts中那上下文对象，
-		 * 如果是第一次当然没有，那就调用NamedContextFactory#createContext()方法创建之，在这个方法中会创建AnnotationConfigApplicationContext对象
-		 * 创建完之后 给这个
-		 * AnnotationConfigApplicationContext对象 设置parent属性
-		 * 这个parent 是因为 NamedContextFactory实现了ApplicationContextAware接口
-		 * 把Spring Boot的构建的上下文赋值给了parent
-		 *
-		 * 这个parent属性就包括了Spring Boot中所有的对象，当然也就包括扫描自动装配的类了，当然也就包括在配置类中声明的feign组件了
+		 * TODO
+		 * 	进入该方法
+		 * 	查看 spring-cloud-commons这个项目
 		 */
+		// 从 `FeignContext` 中获取指定 `contextId` 和 `type` 的 Bean 实例
+		// `contextId` 是 Feign 客户端的上下文名称，用于标识特定的客户端配置
 		T instance = context.getInstance(contextId, type);
 		if (instance == null) {
+			// 如果没有找到 Bean 实例，抛出 `IllegalStateException` 异常，并说明缺少该类型的 Bean
 			throw new IllegalStateException(
 				"No bean found of type " + type + " for " + contextId);
 		}
@@ -383,82 +386,98 @@ public class FeignClientFactoryBean implements FactoryBean<Object>, Initializing
 	}
 
 	/**
+	 * 负责构建并返回一个 Feign 客户端的代理对象，并为它配置相关的属性，比如负载均衡和自定义 Client
+	 *
 	 * @param <T> the target type of the Feign client
 	 * @return a {@link Feign} client created with the specified data and the context
 	 * information
 	 */
 	<T> T getTarget() {
-		// 容Spring 容器中 得到FeignContext对象
 		//TODO FeignAutoConfiguration里面创建的 FeignContext
+		// 从 Spring 上下文中获取 `FeignContext`，它是 Feign 客户端的上下文，提供所需的 Bean 实例
+		// 如果 `beanFactory` 不为 null，就从 `beanFactory` 中获取；否则从 `applicationContext` 获取
 		FeignContext context = beanFactory != null
 			? beanFactory.getBean(FeignContext.class)
 			: applicationContext.getBean(FeignContext.class);
-		//TODO 进入该方法
+		// TODO 进入该方法
+		// 创建 Feign 客户端的 `Feign.Builder`，用于构建 Feign 实例
+		// 其中包含编码器、解码器、拦截器、错误处理器等配置
 		Feign.Builder builder = feign(context);
-
+		// 如果 `url` 未指定（即为空），则说明需要通过负载均衡来选择实例   从注解中得到
 		if (!StringUtils.hasText(url)) {
-
+			// 日志记录说明，对于当前 `name`，因为 `url` 未提供，将通过负载均衡选择一个实例
 			if (LOG.isInfoEnabled()) {
 				LOG.info("For '" + name
 					+ "' URL not provided. Will try picking an instance via load-balancing.");
 			}
-			if (!name.startsWith("http")) {
+			if (!name.startsWith("http")) {  // 如果 `name` 不以 "http" 开头，则默认加上 "http://" 前缀
 				url = "http://" + name;
-			} else {
+			} else { // 否则直接将 `name` 作为 URL
 				url = name;
 			}
+			// 调用 `cleanPath()` 方法，清理和拼接路径
+			// 例如去除重复的斜杠等，以确保路径格式正确
 			url += cleanPath();
+			// 调用 `loadBalance` 方法，返回通过负载均衡配置的 Feign 客户端
+			// `HardCodedTarget` 包含类型 `type`，名称 `name` 和构建后的 URL，用于 Feign 的代理生成
 			return (T) loadBalance(builder, context,
 				new HardCodedTarget<>(type, name, url));
 		}
-		if (StringUtils.hasText(url) && !url.startsWith("http")) {
+		if (StringUtils.hasText(url) && !url.startsWith("http")) { // 如果 `url` 有值且未以 "http" 开头，则默认加上 "http://" 前缀
 			url = "http://" + url;
 		}
+		// 将最终处理后的 URL 拼接 `cleanPath()` 生成完整 URL 字符串
 		String url = this.url + cleanPath();
 		// 最终得到的事loadBalancerFeignClient对象 通过它发起http远程调用
 		/**
 		 * FeignAutoConfiguration中配置了两个Client的实现类，即ApacheHttpClient和OkHttpClient
-		 *
 		 * ApacheHttpClient为例，它是声明在FeignAutoConfiguration.HttpClientFeignConfiguration配置类中的
-		 *
 		 * 但是该类上有一个注解，即@ConditionalOnMissingClass(“com.netflix.loadbalancer.ILoadBalancer”)，
 		 * 表示只有当缺失了 com.netflix.loadbalancer.ILoadBalancer接口(即没有对应的依赖)
 		 * 这个ILoadBalancer和ribbon有关
-		 *
 		 * 我们在微服务开发的时候，一般是feign和ribbon配合使用的，这两个框架的依赖都会引入，
 		 * 所以，FeignAutoConfiguration.HttpClientFeignConfiguration不会被Spring扫描到Spring容器中
 		 * ，因为不满足条件注解的条件，
 		 * 所以ApacheHttpClient和OkHttpClient这两个Client接口的实现类也就不会被实例化到Spring
-		 *
 		 * 查看OkHttpFeignLoadBalancedConfiguration和HttpClientFeignLoadBalancedConfiguration
 		 */
+		// 尝试从 `FeignContext` 中获取 `Client` 类型的 Bean 实例
+		// `Client` 是 Feign 用于发送请求的核心组件
 		Client client = getOptional(context, Client.class);
 		if (client != null) {
+			// 如果 `client` 是 `LoadBalancerFeignClient` 类型，说明启用了负载均衡，但 URL 已指定
+			// 将 `client` 指向 `LoadBalancerFeignClient` 的委托 `Client`
 			if (client instanceof LoadBalancerFeignClient) {
 				// not load balancing because we have a url,
 				// but ribbon is on the classpath, so unwrap
 				client = ((LoadBalancerFeignClient) client).getDelegate();
 			}
+			// 同样，如果 `client` 是 `FeignBlockingLoadBalancerClient` 类型，将它指向委托
 			if (client instanceof FeignBlockingLoadBalancerClient) {
 				// not load balancing because we have a url,
 				// but Spring Cloud LoadBalancer is on the classpath, so unwrap
 				client = ((FeignBlockingLoadBalancerClient) client).getDelegate();
 			}
+			// 如果 `client` 是 `RetryableFeignBlockingLoadBalancerClient` 类型，指向其委托
 			if (client instanceof RetryableFeignBlockingLoadBalancerClient) {
 				// not load balancing because we have a url,
 				// but Spring Cloud LoadBalancer is on the classpath, so unwrap
 				client = ((RetryableFeignBlockingLoadBalancerClient) client)
 					.getDelegate();
 			}
+			// 将处理后的 `client` 设置到 `builder` 中，作为 Feign 请求的实际 `Client`
 			// 将client设置到builder属性中
 			builder.client(client);
 		}
+
+		// 获取 `Targeter`，它是用于生成 Feign 代理的组件
+		// `Targeter` 将用于将 Feign 请求代理到实际的 HTTP 客户端
 		//TODO Targeter是 org.springframework.cloud.openfeign.FeignAutoConfiguration 里面创建的
 		Targeter targeter = get(context, Targeter.class);
-		// 通过动态代理生辰给的this.type对象并返回
-		// 查看 org.springframework.cloud.openfeign.DefaultTargeter.target
+		// 使用 `targeter` 创建 Feign 客户端的代理实例，传入当前对象、`builder`、上下文和 `HardCodedTarget`
+		// TODO 查看 org.springframework.cloud.openfeign.DefaultTargeter.target
 		return (T) targeter.target(this, builder, context,
-			new HardCodedTarget<>(type, name, url));
+			new HardCodedTarget<>(type, name, url));  // `HardCodedTarget` 是代理的目标类型、名称和 URL
 	}
 
 	private String cleanPath() {

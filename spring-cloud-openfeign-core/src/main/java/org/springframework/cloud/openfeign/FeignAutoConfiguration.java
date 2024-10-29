@@ -78,13 +78,14 @@ import org.springframework.data.domain.Sort;
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(Feign.class)
-@EnableConfigurationProperties({ FeignClientProperties.class,
-		FeignHttpClientProperties.class, FeignEncoderProperties.class })
+@EnableConfigurationProperties({ FeignClientProperties.class,  // yml文件中feign.client.*的配置
+		FeignHttpClientProperties.class, // yml文件中feign.httpclient.*的配置
+	FeignEncoderProperties.class })  // yml文件中feign.encoder.*的配置
 @Import(DefaultGzipDecoderConfiguration.class)
 public class FeignAutoConfiguration {
 
 	private static final Log LOG = LogFactory.getLog(FeignAutoConfiguration.class);
-
+	// configurations即@EnableFeignClients.defaultConfiguration和@FeignClient.configuration，参考FeignClientsRegistrar的流程图
 	@Autowired(required = false)
 	private List<FeignClientSpecification> configurations = new ArrayList<>();
 
