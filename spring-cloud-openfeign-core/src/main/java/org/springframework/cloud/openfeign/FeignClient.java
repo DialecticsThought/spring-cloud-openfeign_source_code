@@ -78,6 +78,11 @@ public @interface FeignClient {
 	String contextId() default "";
 
 	/**
+	 * TODO
+	 * 	说明：用于定义服务名称，这是 value 属性的同义词。
+	 * 	作用：类似于 value，用于指定服务的逻辑名称或服务 ID。Spring 推荐使用 name 代替 value 和 serviceId。
+	 * 	示例：@FeignClient(name = "order-service") 指定服务名为 order-service。
+	 *
 	 * @return The service id with optional protocol prefix. Synonym for {@link #value()
 	 * value}.
 	 */
@@ -85,6 +90,11 @@ public @interface FeignClient {
 	String name() default "";
 
 	/**
+	 * TODO
+	 * 	说明：这是 @Qualifier 注解的值，为 Feign 客户端指定限定符，但已被废弃。
+	 * 	作用：用于为该 Feign 客户端 Bean 指定限定符，确保 Spring 在注入时可以精确识别此 Bean 实例。如果同时设置了 qualifier 和 qualifiers，优先使用 qualifiers。
+	 * 	标记：已被废弃，建议改用 qualifiers() 属性（未在此代码段中显示）。
+	 *
 	 * @return the <code>@Qualifier</code> value for the feign client.
 	 * @deprecated in favour of {@link #qualifiers()}.
 	 * <p>
@@ -98,8 +108,32 @@ public @interface FeignClient {
 	String qualifier() default "";
 
 	/**
-	 * TODO
 	 *
+	 *	<pre>
+	 *	 TODO
+	 *	  你有两个不同的客户端类 UserServiceClient 和 UserServiceClientV2，它们都指向相同的 user-service 服务，
+	 *	  但由于客户端配置不同，你希望将它们分别作为不同的 Bean 注册并加以区分
+	 *		 @FeignClient(name = "user-service", qualifiers = {"userClientV1"})
+	 * 		  public interface UserServiceClient {
+	 *     	 	@GetMapping("/users/{id}")
+	 *     	 	User getUserById(@PathVariable("id") Long id);
+	 * 		 }
+	 * 		 @FeignClient(name = "user-service", qualifiers = {"userClientV2"})
+	 * 		 public interface UserServiceClientV2 {
+	 *     	 	@GetMapping("/v2/users/{id}")
+	 *     	 	User getUserById(@PathVariable("id") Long id);
+	 * 		 }
+	 * 		 使用 qualifiers 进行注入
+	 * 		 两个客户端类都注册为了 user-service 服务的 Feign 客户端，但在 Spring 容器中是不同的 Bean（分别带有限定符 userClientV1 和 userClientV2）
+	 * 		 这样在注入时，可以根据需要指定某一个限定符，从而选择合适的客户端 Bean
+	 * 		 @Autowired
+	 * 		 @Qualifier("userClientV1")
+	 * 		 private UserServiceClient userServiceClient;
+	 *
+	 * 		 @Autowired
+	 * 		 @Qualifier("userClientV2")
+	 * 		 private UserServiceClientV2 userServiceClientV2;
+	 *	</pre>
 	 * @return the <code>@Qualifiers</code> value for the feign client.
 	 * <p>
 	 * If both {@link #qualifier()} and {@link #qualifiers()} are present, we will use the
