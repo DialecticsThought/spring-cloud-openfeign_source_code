@@ -3,12 +3,14 @@
  */
 package feign.querymap;
 
+import feign.Param;
 import feign.QueryMapEncoder;
 import feign.codec.EncodeException;
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
 import java.beans.PropertyDescriptor;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,9 +27,12 @@ implements QueryMapEncoder {
             ObjectParamMetadata metadata = this.getMetadata(object.getClass());
             HashMap<String, Object> propertyNameToValue = new HashMap<String, Object>();
             for (PropertyDescriptor pd : metadata.objectProperties) {
-                Object value = pd.getReadMethod().invoke(object, new Object[0]);
+                Method method = pd.getReadMethod();
+                Object value = method.invoke(object, new Object[0]);
                 if (value == null || value == object) continue;
-                propertyNameToValue.put(pd.getName(), value);
+                Param alias = method.getAnnotation(Param.class);
+                String name = alias != null ? alias.value() : pd.getName();
+                propertyNameToValue.put(name, value);
             }
             return propertyNameToValue;
         }

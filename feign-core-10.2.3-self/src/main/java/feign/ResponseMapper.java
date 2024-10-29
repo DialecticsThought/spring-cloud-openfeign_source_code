@@ -3,6 +3,7 @@
  */
 package feign;
 
+import feign.Response;
 import java.lang.reflect.Type;
 
 public interface ResponseMapper {

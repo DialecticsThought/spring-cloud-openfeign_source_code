@@ -3,20 +3,22 @@
  */
 package feign.template;
 
-import feign.Util;
-
+import feign.template.Expression;
+import feign.template.Expressions;
+import feign.template.Literal;
+import feign.template.TemplateChunk;
+import feign.template.UriUtils;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Template {
-    static final String COLLECTION_DELIMITER = ";";
     private static final Logger logger = Logger.getLogger(Template.class.getName());
     private static final Pattern QUERY_STRING_PATTERN = Pattern.compile("(?<!\\{)(\\?)");
     private final String template;
@@ -38,19 +40,30 @@ public class Template {
         this.parseTemplate();
     }
 
+    Template(ExpansionOptions allowUnresolved, EncodingOptions encode, boolean encodeSlash, Charset charset, List<TemplateChunk> chunks) {
+        this.templateChunks.addAll(chunks);
+        this.allowUnresolved = ExpansionOptions.ALLOW_UNRESOLVED == allowUnresolved;
+        this.encode = encode;
+        this.encodeSlash = encodeSlash;
+        this.charset = charset;
+        this.template = this.toString();
+    }
+
     public String expand(Map<String, ?> variables) {
         if (variables == null) {
             throw new IllegalArgumentException("variable map is required.");
         }
-        StringBuilder resolved = new StringBuilder();
+        StringBuilder resolved = null;
         for (TemplateChunk chunk : this.templateChunks) {
-            if (chunk instanceof Expression) {
-                String resolvedExpression = this.resolveExpression((Expression)chunk, variables);
-                if (resolvedExpression == null) continue;
-                resolved.append(resolvedExpression);
-                continue;
+            String expanded = chunk instanceof Expression ? this.resolveExpression((Expression)chunk, variables) : chunk.getValue();
+            if (expanded == null) continue;
+            if (resolved == null) {
+                resolved = new StringBuilder();
             }
-            resolved.append(chunk.getValue());
+            resolved.append(expanded);
+        }
+        if (resolved == null) {
+            return null;
         }
         return resolved.toString();
     }
@@ -60,28 +73,21 @@ public class Template {
         Object value = variables.get(expression.getName());
         if (value != null) {
             String expanded = expression.expand(value, this.encode.isEncodingRequired());
-            if (Util.isNotBlank(expanded)) {
-                if (this.encodeSlash) {
+            if (expanded != null) {
+                if (!this.encodeSlash) {
                     logger.fine("Explicit slash decoding specified, decoding all slashes in uri");
-                    expanded = expanded.replaceAll("/", "%2F");
+                    expanded = expanded.replaceAll("%2F", "/");
                 }
                 resolved = expanded;
             }
         } else if (this.allowUnresolved) {
-            resolved = this.encode(expression.toString());
+            resolved = this.encodeLiteral(expression.toString());
         }
         return resolved;
     }
 
-    private String encode(String value) {
-        return this.encode.isEncodingRequired() ? UriUtils.encode(value, this.charset) : value;
-    }
-
-    private String encode(String value, boolean query) {
-        if (this.encode.isEncodingRequired()) {
-            return query ? UriUtils.queryEncode(value, this.charset) : UriUtils.pathEncode(value, this.charset);
-        }
-        return value;
+    private String encodeLiteral(String value) {
+        return this.encodeLiteral() ? UriUtils.encode(value, this.charset, true) : value;
     }
 
     public List<String> getVariables() {
@@ -92,37 +98,32 @@ public class Template {
         return this.templateChunks.stream().filter(templateChunk -> Literal.class.isAssignableFrom(templateChunk.getClass())).map(Object::toString).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
+    public List<TemplateChunk> getTemplateChunks() {
+        return Collections.unmodifiableList(this.templateChunks);
+    }
+
     public boolean isLiteral() {
         return this.getVariables().isEmpty();
     }
 
     private void parseTemplate() {
-        Matcher queryStringMatcher = QUERY_STRING_PATTERN.matcher(this.template);
-        if (queryStringMatcher.find()) {
-            String path = this.template.substring(0, queryStringMatcher.start());
-            String query = this.template.substring(queryStringMatcher.end() - 1);
-            this.parseFragment(path, false);
-            this.parseFragment(query, true);
-        } else {
-            this.parseFragment(this.template, false);
-        }
+        this.parseFragment(this.template);
     }
 
-    private void parseFragment(String fragment, boolean query) {
+    private void parseFragment(String fragment) {
         ChunkTokenizer tokenizer = new ChunkTokenizer(fragment);
         while (tokenizer.hasNext()) {
             String chunk = tokenizer.next();
             if (chunk.startsWith("{")) {
-                UriUtils.FragmentType type = query ? UriUtils.FragmentType.QUERY : UriUtils.FragmentType.PATH_SEGMENT;
-                Expression expression = Expressions.create(chunk, type);
+                Expression expression = Expressions.create(chunk);
                 if (expression == null) {
-                    this.templateChunks.add(Literal.create(this.encode(chunk, query)));
+                    this.templateChunks.add(Literal.create(this.encodeLiteral(chunk)));
                     continue;
                 }
                 this.templateChunks.add(expression);
                 continue;
             }
-            this.templateChunks.add(Literal.create(this.encode(chunk, query)));
+            this.templateChunks.add(Literal.create(this.encodeLiteral(chunk)));
         }
     }
 
@@ -130,7 +131,7 @@ public class Template {
         return this.templateChunks.stream().map(TemplateChunk::getValue).collect(Collectors.joining());
     }
 
-    public boolean encode() {
+    public boolean encodeLiteral() {
         return this.encode.isEncodingRequired();
     }
 
@@ -152,7 +153,7 @@ public class Template {
         REQUIRED(true),
         NOT_REQUIRED(false);
 
-        private boolean shouldEncode;
+        private final boolean shouldEncode;
 
         private EncodingOptions(boolean shouldEncode) {
             this.shouldEncode = shouldEncode;

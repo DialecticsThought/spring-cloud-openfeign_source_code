@@ -5,6 +5,7 @@ package feign.template;
 
 import feign.Util;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
@@ -14,16 +15,28 @@ import java.util.regex.Pattern;
 public class UriUtils {
     private static final Pattern PCT_ENCODED_PATTERN = Pattern.compile("%[0-9A-Fa-f][0-9A-Fa-f]");
 
-    public static boolean isEncoded(String value) {
-        return PCT_ENCODED_PATTERN.matcher(value).matches();
+    public static boolean isEncoded(String value, Charset charset) {
+        for (byte b : value.getBytes(charset)) {
+            if (UriUtils.isUnreserved((char)b) || b == 37) continue;
+            return false;
+        }
+        return PCT_ENCODED_PATTERN.matcher(value).find();
     }
 
     public static String encode(String value) {
-        return UriUtils.encodeReserved(value, FragmentType.URI, Util.UTF_8);
+        return UriUtils.encodeChunk(value, Util.UTF_8, false);
     }
 
     public static String encode(String value, Charset charset) {
-        return UriUtils.encodeReserved(value, FragmentType.URI, charset);
+        return UriUtils.encodeChunk(value, charset, false);
+    }
+
+    public static String encode(String value, boolean allowReservedCharacters) {
+        return UriUtils.encodeInternal(value, Util.UTF_8, allowReservedCharacters);
+    }
+
+    public static String encode(String value, Charset charset, boolean allowReservedCharacters) {
+        return UriUtils.encodeInternal(value, charset, allowReservedCharacters);
     }
 
     public static String decode(String value, Charset charset) {
@@ -35,52 +48,57 @@ public class UriUtils {
         }
     }
 
-    public static String pathEncode(String path, Charset charset) {
-        return UriUtils.encodeReserved(path, FragmentType.PATH_SEGMENT, charset);
-    }
-
-    public static String queryEncode(String query, Charset charset) {
-        return UriUtils.encodeReserved(query, FragmentType.QUERY, charset);
-    }
-
-    public static String queryParamEncode(String queryParam, Charset charset) {
-        return UriUtils.encodeReserved(queryParam, FragmentType.QUERY_PARAM, charset);
-    }
-
     public static boolean isAbsolute(String uri) {
         return uri != null && !uri.isEmpty() && uri.startsWith("http");
     }
 
-    public static String encodeReserved(String value, FragmentType type, Charset charset) {
+    public static String encodeInternal(String value, Charset charset, boolean allowReservedCharacters) {
         Matcher matcher = PCT_ENCODED_PATTERN.matcher(value);
         if (!matcher.find()) {
-            return UriUtils.encodeChunk(value, type, charset);
+            return UriUtils.encodeChunk(value, charset, true);
         }
         int length = value.length();
         StringBuilder encoded = new StringBuilder(length + 8);
         int index = 0;
         do {
             String before = value.substring(index, matcher.start());
-            encoded.append(UriUtils.encodeChunk(before, type, charset));
+            encoded.append(UriUtils.encodeChunk(before, charset, allowReservedCharacters));
             encoded.append(matcher.group());
             index = matcher.end();
         } while (matcher.find());
         String tail = value.substring(index, length);
-        encoded.append(UriUtils.encodeChunk(tail, type, charset));
+        encoded.append(UriUtils.encodeChunk(tail, charset, allowReservedCharacters));
         return encoded.toString();
     }
 
-    private static String encodeChunk(String value, FragmentType type, Charset charset) {
-        byte[] data = value.getBytes(charset);
-        ByteArrayOutputStream encoded = new ByteArrayOutputStream();
-        for (byte b : data) {
-            if (type.isAllowed(b)) {
-                encoded.write(b);
-                continue;
-            }
-            UriUtils.pctEncode(b, encoded);
+    /*
+     * Enabled aggressive block sorting
+     * Enabled unnecessary exception pruning
+     * Enabled aggressive exception aggregation
+     */
+    private static String encodeChunk(String value, Charset charset, boolean allowReserved) {
+        if (UriUtils.isEncoded(value, charset)) {
+            return value;
         }
-        return new String(encoded.toByteArray());
+        byte[] data = value.getBytes(charset);
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();){
+            for (byte b : data) {
+                if (UriUtils.isUnreserved((char)b)) {
+                    bos.write(b);
+                    continue;
+                }
+                if (UriUtils.isReserved((char)b) && allowReserved) {
+                    bos.write(b);
+                    continue;
+                }
+                UriUtils.pctEncode(b, bos);
+            }
+            String string = new String(bos.toByteArray(), charset);
+            return string;
+        }
+        catch (IOException ioe) {
+            throw new IllegalStateException("Error occurred during encoding of the uri: " + ioe.getMessage(), ioe);
+        }
     }
 
     private static void pctEncode(byte data, ByteArrayOutputStream bos) {
@@ -91,83 +109,32 @@ public class UriUtils {
         bos.write(hex2);
     }
 
-    static enum FragmentType {
-        URI{
+    private static boolean isAlpha(int c) {
+        return c >= 97 && c <= 122 || c >= 65 && c <= 90;
+    }
 
-            @Override
-            boolean isAllowed(int c) {
-                return this.isUnreserved(c);
-            }
-        }
-        ,
-        RESERVED{
+    private static boolean isDigit(int c) {
+        return c >= 48 && c <= 57;
+    }
 
-            @Override
-            boolean isAllowed(int c) {
-                return this.isUnreserved(c) || this.isReserved(c);
-            }
-        }
-        ,
-        PATH_SEGMENT{
+    private static boolean isGenericDelimiter(int c) {
+        return c == 58 || c == 47 || c == 63 || c == 35 || c == 91 || c == 93 || c == 64;
+    }
 
-            @Override
-            boolean isAllowed(int c) {
-                return this.isPchar(c) || c == 47;
-            }
-        }
-        ,
-        QUERY{
+    private static boolean isSubDelimiter(int c) {
+        return c == 33 || c == 36 || c == 38 || c == 39 || c == 40 || c == 41 || c == 42 || c == 43 || c == 44 || c == 59 || c == 61;
+    }
 
-            @Override
-            boolean isAllowed(int c) {
-                if (c == 43) {
-                    return false;
-                }
-                return this.isPchar(c) || c == 47 || c == 63;
-            }
-        }
-        ,
-        QUERY_PARAM{
+    private static boolean isUnreserved(int c) {
+        return UriUtils.isAlpha(c) || UriUtils.isDigit(c) || c == 45 || c == 46 || c == 95 || c == 126;
+    }
 
-            @Override
-            boolean isAllowed(int c) {
-                if (c == 61 || c == 38 || c == 63) {
-                    return false;
-                }
-                return QUERY.isAllowed(c);
-            }
-        };
+    private static boolean isReserved(int c) {
+        return UriUtils.isGenericDelimiter(c) || UriUtils.isSubDelimiter(c);
+    }
 
-
-        abstract boolean isAllowed(int var1);
-
-        protected boolean isAlpha(int c) {
-            return c >= 97 && c <= 122 || c >= 65 && c <= 90;
-        }
-
-        protected boolean isDigit(int c) {
-            return c >= 48 && c <= 57;
-        }
-
-        protected boolean isGenericDelimiter(int c) {
-            return c == 58 || c == 47 || c == 63 || c == 35 || c == 91 || c == 93 || c == 64;
-        }
-
-        protected boolean isSubDelimiter(int c) {
-            return c == 33 || c == 36 || c == 38 || c == 39 || c == 40 || c == 41 || c == 42 || c == 43 || c == 44 || c == 59 || c == 61;
-        }
-
-        protected boolean isUnreserved(int c) {
-            return this.isAlpha(c) || this.isDigit(c) || c == 45 || c == 46 || c == 95 || c == 126;
-        }
-
-        protected boolean isReserved(int c) {
-            return this.isGenericDelimiter(c) || this.isSubDelimiter(c);
-        }
-
-        protected boolean isPchar(int c) {
-            return this.isUnreserved(c) || this.isSubDelimiter(c) || c == 58 || c == 64;
-        }
+    private boolean isPchar(int c) {
+        return UriUtils.isUnreserved(c) || UriUtils.isSubDelimiter(c) || c == 58 || c == 64;
     }
 }
 

@@ -3,13 +3,19 @@
  */
 package feign;
 
+import feign.Experimental;
+import feign.Param;
+import feign.RequestTemplate;
 import java.io.Serializable;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public final class MethodMetadata
 implements Serializable {
@@ -20,16 +26,22 @@ implements Serializable {
     private Integer bodyIndex;
     private Integer headerMapIndex;
     private Integer queryMapIndex;
-    private boolean queryMapEncoded;
+    private boolean alwaysEncodeBody;
     private transient Type bodyType;
-    private RequestTemplate template = new RequestTemplate();
-    private List<String> formParams = new ArrayList<String>();
-    private Map<Integer, Collection<String>> indexToName = new LinkedHashMap<Integer, Collection<String>>();
-    private Map<Integer, Class<? extends Param.Expander>> indexToExpanderClass = new LinkedHashMap<Integer, Class<? extends Param.Expander>>();
-    private Map<Integer, Boolean> indexToEncoded = new LinkedHashMap<Integer, Boolean>();
+    private final RequestTemplate template = new RequestTemplate();
+    private final List<String> formParams = new ArrayList<String>();
+    private final Map<Integer, Collection<String>> indexToName = new LinkedHashMap<Integer, Collection<String>>();
+    private final Map<Integer, Class<? extends Param.Expander>> indexToExpanderClass = new LinkedHashMap<Integer, Class<? extends Param.Expander>>();
+    private final Map<Integer, Boolean> indexToEncoded = new LinkedHashMap<Integer, Boolean>();
     private transient Map<Integer, Param.Expander> indexToExpander;
+    private BitSet parameterToIgnore = new BitSet();
+    private boolean ignored;
+    private transient Class<?> targetType;
+    private transient Method method;
+    private final transient List<String> warnings = new ArrayList<String>();
 
     MethodMetadata() {
+        this.template.methodMetadata(this);
     }
 
     public String configKey() {
@@ -86,12 +98,14 @@ implements Serializable {
         return this;
     }
 
-    public boolean queryMapEncoded() {
-        return this.queryMapEncoded;
+    @Experimental
+    public boolean alwaysEncodeBody() {
+        return this.alwaysEncodeBody;
     }
 
-    public MethodMetadata queryMapEncoded(boolean queryMapEncoded) {
-        this.queryMapEncoded = queryMapEncoded;
+    @Experimental
+    MethodMetadata alwaysEncodeBody(boolean alwaysEncodeBody) {
+        this.alwaysEncodeBody = alwaysEncodeBody;
         return this;
     }
 
@@ -131,6 +145,66 @@ implements Serializable {
 
     public Map<Integer, Param.Expander> indexToExpander() {
         return this.indexToExpander;
+    }
+
+    public MethodMetadata ignoreParamater(int i) {
+        this.parameterToIgnore.set(i);
+        return this;
+    }
+
+    public BitSet parameterToIgnore() {
+        return this.parameterToIgnore;
+    }
+
+    public MethodMetadata parameterToIgnore(BitSet parameterToIgnore) {
+        this.parameterToIgnore = parameterToIgnore;
+        return this;
+    }
+
+    public boolean shouldIgnoreParamater(int i) {
+        return this.parameterToIgnore.get(i);
+    }
+
+    public boolean isAlreadyProcessed(Integer index) {
+        return index.equals(this.urlIndex) || index.equals(this.bodyIndex) || index.equals(this.headerMapIndex) || index.equals(this.queryMapIndex) || this.indexToName.containsKey(index) || this.indexToExpanderClass.containsKey(index) || this.indexToEncoded.containsKey(index) || this.indexToExpander != null && this.indexToExpander.containsKey(index) || this.parameterToIgnore.get(index);
+    }
+
+    public void ignoreMethod() {
+        this.ignored = true;
+    }
+
+    public boolean isIgnored() {
+        return this.ignored;
+    }
+
+    @Experimental
+    public MethodMetadata targetType(Class<?> targetType) {
+        this.targetType = targetType;
+        return this;
+    }
+
+    @Experimental
+    public Class<?> targetType() {
+        return this.targetType;
+    }
+
+    @Experimental
+    public MethodMetadata method(Method method) {
+        this.method = method;
+        return this;
+    }
+
+    @Experimental
+    public Method method() {
+        return this.method;
+    }
+
+    public void addWarning(String warning) {
+        this.warnings.add(warning);
+    }
+
+    public String warnings() {
+        return this.warnings.stream().collect(Collectors.joining("\n- ", "\nWarnings:\n- ", ""));
     }
 }
 

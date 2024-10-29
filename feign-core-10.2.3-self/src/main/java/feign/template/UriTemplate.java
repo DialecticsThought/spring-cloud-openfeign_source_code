@@ -3,6 +3,7 @@
  */
 package feign.template;
 
+import feign.template.Template;
 import java.nio.charset.Charset;
 
 public class UriTemplate
@@ -20,7 +21,7 @@ extends Template {
     }
 
     private UriTemplate(String template, boolean encodeSlash, Charset charset) {
-        super(template, Template.ExpansionOptions.REQUIRED, Template.EncodingOptions.REQUIRED, encodeSlash, charset);
+        super(template, ExpansionOptions.REQUIRED, EncodingOptions.REQUIRED, encodeSlash, charset);
     }
 }
 

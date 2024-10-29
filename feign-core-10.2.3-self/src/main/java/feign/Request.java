@@ -3,40 +3,56 @@
  */
 package feign;
 
-import feign.template.BodyTemplate;
+import feign.Experimental;
+import feign.RequestTemplate;
+import feign.Util;
+import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
-public final class Request {
+public final class Request
+implements Serializable {
     private final HttpMethod httpMethod;
     private final String url;
     private final Map<String, Collection<String>> headers;
     private final Body body;
+    private final RequestTemplate requestTemplate;
+    private final ProtocolVersion protocolVersion;
 
+    @Deprecated
     public static Request create(String method, String url, Map<String, Collection<String>> headers, byte[] body, Charset charset) {
         Util.checkNotNull(method, "httpMethod of %s", method);
         HttpMethod httpMethod = HttpMethod.valueOf(method.toUpperCase());
-        return Request.create(httpMethod, url, headers, body, charset);
+        return Request.create(httpMethod, url, headers, body, charset, null);
     }
 
+    @Deprecated
     public static Request create(HttpMethod httpMethod, String url, Map<String, Collection<String>> headers, byte[] body, Charset charset) {
-        return Request.create(httpMethod, url, headers, Body.encoded(body, charset));
+        return Request.create(httpMethod, url, headers, Body.create(body, charset), null);
     }
 
-    public static Request create(HttpMethod httpMethod, String url, Map<String, Collection<String>> headers, Body body) {
-        return new Request(httpMethod, url, headers, body);
+    public static Request create(HttpMethod httpMethod, String url, Map<String, Collection<String>> headers, byte[] body, Charset charset, RequestTemplate requestTemplate) {
+        return Request.create(httpMethod, url, headers, Body.create(body, charset), requestTemplate);
     }
 
-    Request(HttpMethod method, String url, Map<String, Collection<String>> headers, Body body) {
+    public static Request create(HttpMethod httpMethod, String url, Map<String, Collection<String>> headers, Body body, RequestTemplate requestTemplate) {
+        return new Request(httpMethod, url, headers, body, requestTemplate);
+    }
+
+    Request(HttpMethod method, String url, Map<String, Collection<String>> headers, Body body, RequestTemplate requestTemplate) {
         this.httpMethod = Util.checkNotNull(method, "httpMethod of %s", method.name());
         this.url = Util.checkNotNull(url, "url", new Object[0]);
         this.headers = Util.checkNotNull(headers, "headers of %s %s", new Object[]{method, url});
         this.body = body;
+        this.requestTemplate = requestTemplate;
+        this.protocolVersion = ProtocolVersion.HTTP_1_1;
     }
 
+    @Deprecated
     public String method() {
         return this.httpMethod.name();
     }
@@ -50,7 +66,7 @@ public final class Request {
     }
 
     public Map<String, Collection<String>> headers() {
-        return this.headers;
+        return Collections.unmodifiableMap(this.headers);
     }
 
     public Charset charset() {
@@ -61,8 +77,16 @@ public final class Request {
         return this.body.data;
     }
 
-    public Body requestBody() {
-        return this.body;
+    public boolean isBinary() {
+        return this.body.isBinary();
+    }
+
+    public int length() {
+        return this.body.length();
+    }
+
+    public ProtocolVersion protocolVersion() {
+        return this.protocolVersion;
     }
 
     public String toString() {
@@ -79,35 +103,151 @@ public final class Request {
         return builder.toString();
     }
 
+    @Experimental
+    public RequestTemplate requestTemplate() {
+        return this.requestTemplate;
+    }
+
+    @Experimental
+    public static class Body
+    implements Serializable {
+        private transient Charset encoding;
+        private byte[] data;
+
+        private Body() {
+        }
+
+        private Body(byte[] data) {
+            this.data = data;
+        }
+
+        private Body(byte[] data, Charset encoding) {
+            this.data = data;
+            this.encoding = encoding;
+        }
+
+        public Optional<Charset> getEncoding() {
+            return Optional.ofNullable(this.encoding);
+        }
+
+        public int length() {
+            return this.data != null ? this.data.length : 0;
+        }
+
+        public byte[] asBytes() {
+            return this.data;
+        }
+
+        public String asString() {
+            return !this.isBinary() ? new String(this.data, this.encoding) : "Binary data";
+        }
+
+        public boolean isBinary() {
+            return this.encoding == null || this.data == null;
+        }
+
+        public static Body create(String data) {
+            return new Body(data.getBytes());
+        }
+
+        public static Body create(String data, Charset charset) {
+            return new Body(data.getBytes(charset), charset);
+        }
+
+        public static Body create(byte[] data) {
+            return new Body(data);
+        }
+
+        public static Body create(byte[] data, Charset charset) {
+            return new Body(data, charset);
+        }
+
+        @Deprecated
+        public static Body encoded(byte[] data, Charset charset) {
+            return Body.create(data, charset);
+        }
+
+        public static Body empty() {
+            return new Body();
+        }
+    }
+
     public static class Options {
-        private final int connectTimeoutMillis;
-        private final int readTimeoutMillis;
+        private final long connectTimeout;
+        private final TimeUnit connectTimeoutUnit;
+        private final long readTimeout;
+        private final TimeUnit readTimeoutUnit;
         private final boolean followRedirects;
 
+        @Deprecated
         public Options(int connectTimeoutMillis, int readTimeoutMillis, boolean followRedirects) {
-            this.connectTimeoutMillis = connectTimeoutMillis;
-            this.readTimeoutMillis = readTimeoutMillis;
+            this(connectTimeoutMillis, TimeUnit.MILLISECONDS, readTimeoutMillis, TimeUnit.MILLISECONDS, followRedirects);
+        }
+
+        public Options(long connectTimeout, TimeUnit connectTimeoutUnit, long readTimeout, TimeUnit readTimeoutUnit, boolean followRedirects) {
+            this.connectTimeout = connectTimeout;
+            this.connectTimeoutUnit = connectTimeoutUnit;
+            this.readTimeout = readTimeout;
+            this.readTimeoutUnit = readTimeoutUnit;
             this.followRedirects = followRedirects;
         }
 
+        @Deprecated
         public Options(int connectTimeoutMillis, int readTimeoutMillis) {
             this(connectTimeoutMillis, readTimeoutMillis, true);
         }
 
         public Options() {
-            this(10000, 60000);
+            this(10L, TimeUnit.SECONDS, 60L, TimeUnit.SECONDS, true);
         }
 
         public int connectTimeoutMillis() {
-            return this.connectTimeoutMillis;
+            return (int)this.connectTimeoutUnit.toMillis(this.connectTimeout);
         }
 
         public int readTimeoutMillis() {
-            return this.readTimeoutMillis;
+            return (int)this.readTimeoutUnit.toMillis(this.readTimeout);
         }
 
         public boolean isFollowRedirects() {
             return this.followRedirects;
+        }
+
+        public long connectTimeout() {
+            return this.connectTimeout;
+        }
+
+        public TimeUnit connectTimeoutUnit() {
+            return this.connectTimeoutUnit;
+        }
+
+        public long readTimeout() {
+            return this.readTimeout;
+        }
+
+        public TimeUnit readTimeoutUnit() {
+            return this.readTimeoutUnit;
+        }
+    }
+
+    public static enum ProtocolVersion {
+        HTTP_1_0("HTTP/1.0"),
+        HTTP_1_1("HTTP/1.1"),
+        HTTP_2("HTTP/2.0"),
+        MOCK;
+
+        final String protocolVersion;
+
+        private ProtocolVersion() {
+            this.protocolVersion = this.name();
+        }
+
+        private ProtocolVersion(String protocolVersion) {
+            this.protocolVersion = protocolVersion;
+        }
+
+        public String toString() {
+            return this.protocolVersion;
         }
     }
 
@@ -122,60 +262,6 @@ public final class Request {
         TRACE,
         PATCH;
 
-    }
-
-    public static class Body {
-        private final byte[] data;
-        private final Charset encoding;
-        private final BodyTemplate bodyTemplate;
-
-        private Body(byte[] data, Charset encoding, BodyTemplate bodyTemplate) {
-            this.data = data;
-            this.encoding = encoding;
-            this.bodyTemplate = bodyTemplate;
-        }
-
-        public Body expand(Map<String, ?> variables) {
-            if (this.bodyTemplate == null) {
-                return this;
-            }
-            return Body.encoded(this.bodyTemplate.expand(variables).getBytes(this.encoding), this.encoding);
-        }
-
-        public List<String> getVariables() {
-            if (this.bodyTemplate == null) {
-                return Collections.emptyList();
-            }
-            return this.bodyTemplate.getVariables();
-        }
-
-        public static Body encoded(byte[] bodyData, Charset encoding) {
-            return new Body(bodyData, encoding, null);
-        }
-
-        public int length() {
-            return this.data != null ? this.data.length : 0;
-        }
-
-        public byte[] asBytes() {
-            return this.data;
-        }
-
-        public static Body bodyTemplate(String bodyTemplate, Charset encoding) {
-            return new Body(null, encoding, BodyTemplate.create(bodyTemplate));
-        }
-
-        public String bodyTemplate() {
-            return this.bodyTemplate != null ? this.bodyTemplate.toString() : null;
-        }
-
-        public String asString() {
-            return this.encoding != null && this.data != null ? new String(this.data, this.encoding) : "Binary data";
-        }
-
-        public static Body empty() {
-            return new Body(null, null, null);
-        }
     }
 }
 

@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Iterator;
+import java.util.Optional;
 import java.util.Spliterators;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -19,20 +20,22 @@ import java.util.stream.StreamSupport;
 public final class StreamDecoder
 implements Decoder {
     private final Decoder iteratorDecoder;
+    private final Optional<Decoder> delegateDecoder;
 
-    StreamDecoder(Decoder iteratorDecoder) {
+    StreamDecoder(Decoder iteratorDecoder, Decoder delegateDecoder) {
         this.iteratorDecoder = iteratorDecoder;
+        this.delegateDecoder = Optional.ofNullable(delegateDecoder);
     }
 
     @Override
     public Object decode(Response response, Type type) throws IOException, FeignException {
-        if (!(type instanceof ParameterizedType)) {
-            throw new IllegalArgumentException("StreamDecoder supports only stream: unknown " + type);
+        if (!StreamDecoder.isStream(type)) {
+            if (!this.delegateDecoder.isPresent()) {
+                throw new IllegalArgumentException("StreamDecoder supports types other than stream. When type is not stream, the delegate decoder needs to be setting.");
+            }
+            return this.delegateDecoder.get().decode(response, type);
         }
         ParameterizedType streamType = (ParameterizedType)type;
-        if (!Stream.class.equals((Object)streamType.getRawType())) {
-            throw new IllegalArgumentException("StreamDecoder supports only stream: unknown " + type);
-        }
         Iterator iterator = (Iterator)this.iteratorDecoder.decode(response, new IteratorParameterizedType(streamType));
         return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, 0), false).onClose(() -> {
             if (iterator instanceof Closeable) {
@@ -43,8 +46,20 @@ implements Decoder {
         });
     }
 
+    public static boolean isStream(Type type) {
+        if (!(type instanceof ParameterizedType)) {
+            return false;
+        }
+        ParameterizedType parameterizedType = (ParameterizedType)type;
+        return parameterizedType.getRawType().equals(Stream.class);
+    }
+
     public static StreamDecoder create(Decoder iteratorDecoder) {
-        return new StreamDecoder(iteratorDecoder);
+        return new StreamDecoder(iteratorDecoder, null);
+    }
+
+    public static StreamDecoder create(Decoder iteratorDecoder, Decoder delegateDecoder) {
+        return new StreamDecoder(iteratorDecoder, delegateDecoder);
     }
 
     static final class IteratorParameterizedType

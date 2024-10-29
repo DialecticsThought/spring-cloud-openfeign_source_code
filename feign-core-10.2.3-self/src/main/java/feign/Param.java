@@ -9,9 +9,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(value=RetentionPolicy.RUNTIME)
-@Target(value={ElementType.PARAMETER})
+@Target(value={ElementType.PARAMETER, ElementType.FIELD, ElementType.METHOD})
 public @interface Param {
-    public String value();
+    public String value() default "";
 
     public Class<? extends Expander> expander() default ToStringExpander.class;
 

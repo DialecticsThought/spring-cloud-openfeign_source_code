@@ -3,6 +3,7 @@
  */
 package feign.template;
 
+import feign.template.TemplateChunk;
 import java.util.Optional;
 import java.util.regex.Pattern;
 

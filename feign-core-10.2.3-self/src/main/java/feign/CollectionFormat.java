@@ -26,18 +26,18 @@ public enum CollectionFormat {
         for (String value : values) {
             if (this.separator == null) {
                 builder.append(valueCount++ == 0 ? "" : "&");
-                builder.append(UriUtils.queryEncode(field, charset));
+                builder.append(UriUtils.encode(field, charset));
                 if (value == null) continue;
                 builder.append('=');
-                builder.append(UriUtils.queryEncode(value, charset));
+                builder.append(value);
                 continue;
             }
             if (builder.length() == 0) {
-                builder.append(UriUtils.queryEncode(field, charset));
+                builder.append(UriUtils.encode(field, charset));
             }
             if (value == null) continue;
-            builder.append(valueCount++ == 0 ? "=" : this.separator);
-            builder.append(UriUtils.queryEncode(value, charset));
+            builder.append(valueCount++ == 0 ? "=" : UriUtils.encode(this.separator, charset));
+            builder.append(value);
         }
         return builder;
     }

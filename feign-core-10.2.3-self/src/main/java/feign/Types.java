@@ -222,6 +222,19 @@ public final class Types {
         }
     }
 
+    public static Type resolveReturnType(Type baseType, Type overridingType) {
+        if (baseType instanceof Class && overridingType instanceof Class && ((Class)baseType).isAssignableFrom((Class)overridingType)) {
+            return overridingType;
+        }
+        if (baseType instanceof Class && overridingType instanceof ParameterizedType) {
+            return overridingType;
+        }
+        if (baseType instanceof Class && overridingType instanceof TypeVariable) {
+            return overridingType;
+        }
+        return baseType;
+    }
+
     static final class WildcardTypeImpl
     implements WildcardType {
         private final Type upperBound;

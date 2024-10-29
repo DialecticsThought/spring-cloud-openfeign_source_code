@@ -3,6 +3,10 @@
  */
 package feign;
 
+import feign.Experimental;
+import feign.Request;
+import feign.RequestTemplate;
+import feign.Util;
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.IOException;
@@ -10,13 +14,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
 
 public final class Response
 implements Closeable {
@@ -25,14 +25,16 @@ implements Closeable {
     private final Map<String, Collection<String>> headers;
     private final Body body;
     private final Request request;
+    private final Request.ProtocolVersion protocolVersion;
 
     private Response(Builder builder) {
         Util.checkState(builder.request != null, "original request is required", new Object[0]);
         this.status = builder.status;
         this.request = builder.request;
         this.reason = builder.reason;
-        this.headers = builder.headers != null ? Collections.unmodifiableMap(Response.caseInsensitiveCopyOf(builder.headers)) : new LinkedHashMap();
+        this.headers = Util.caseInsensitiveCopyOf(builder.headers);
         this.body = builder.body;
+        this.protocolVersion = builder.protocolVersion;
     }
 
     public Builder toBuilder() {
@@ -63,6 +65,23 @@ implements Closeable {
         return this.request;
     }
 
+    public Request.ProtocolVersion protocolVersion() {
+        return this.protocolVersion;
+    }
+
+    public Charset charset() {
+        Collection<String> contentTypeHeaders = this.headers().get("Content-Type");
+        if (contentTypeHeaders != null) {
+            for (String contentTypeHeader : contentTypeHeaders) {
+                String[] charsetParts;
+                String[] contentTypeParmeters = contentTypeHeader.split(";");
+                if (contentTypeParmeters.length <= 1 || (charsetParts = contentTypeParmeters[1].split("=")).length != 2 || !"charset".equalsIgnoreCase(charsetParts[0].trim())) continue;
+                return Charset.forName(charsetParts[1]);
+            }
+        }
+        return Util.UTF_8;
+    }
+
     public String toString() {
         StringBuilder builder = new StringBuilder("HTTP/1.1 ").append(this.status);
         if (this.reason != null) {
@@ -83,18 +102,6 @@ implements Closeable {
     @Override
     public void close() {
         Util.ensureClosed(this.body);
-    }
-
-    private static Map<String, Collection<String>> caseInsensitiveCopyOf(Map<String, Collection<String>> headers) {
-        TreeMap<String, Collection<String>> result = new TreeMap<String, Collection<String>>(String.CASE_INSENSITIVE_ORDER);
-        for (Map.Entry<String, Collection<String>> entry : headers.entrySet()) {
-            String headerName = entry.getKey();
-            if (!result.containsKey(headerName)) {
-                result.put(headerName.toLowerCase(Locale.ROOT), new LinkedList());
-            }
-            ((Collection)result.get(headerName)).addAll(entry.getValue());
-        }
-        return result;
     }
 
     private static final class ByteArrayBody
@@ -149,10 +156,6 @@ implements Closeable {
         @Override
         public void close() throws IOException {
         }
-
-        public String toString() {
-            return Util.decodeOrDefault(this.data, Util.UTF_8, "Binary data");
-        }
     }
 
     private static final class InputStreamBody
@@ -183,12 +186,12 @@ implements Closeable {
         }
 
         @Override
-        public InputStream asInputStream() throws IOException {
+        public InputStream asInputStream() {
             return this.inputStream;
         }
 
         @Override
-        public Reader asReader() throws IOException {
+        public Reader asReader() {
             return new InputStreamReader(this.inputStream, Util.UTF_8);
         }
 
@@ -212,7 +215,10 @@ implements Closeable {
 
         public InputStream asInputStream() throws IOException;
 
-        public Reader asReader() throws IOException;
+        @Deprecated
+        default public Reader asReader() throws IOException {
+            return this.asReader(StandardCharsets.UTF_8);
+        }
 
         public Reader asReader(Charset var1) throws IOException;
     }
@@ -223,6 +229,8 @@ implements Closeable {
         Map<String, Collection<String>> headers;
         Body body;
         Request request;
+        private RequestTemplate requestTemplate;
+        private Request.ProtocolVersion protocolVersion = Request.ProtocolVersion.HTTP_1_1;
 
         Builder() {
         }
@@ -233,6 +241,7 @@ implements Closeable {
             this.headers = source.headers;
             this.body = source.body;
             this.request = source.request;
+            this.protocolVersion = source.protocolVersion;
         }
 
         public Builder status(int status) {
@@ -273,6 +282,17 @@ implements Closeable {
         public Builder request(Request request) {
             Util.checkNotNull(request, "request is required", new Object[0]);
             this.request = request;
+            return this;
+        }
+
+        public Builder protocolVersion(Request.ProtocolVersion protocolVersion) {
+            this.protocolVersion = protocolVersion;
+            return this;
+        }
+
+        @Experimental
+        public Builder requestTemplate(RequestTemplate requestTemplate) {
+            this.requestTemplate = requestTemplate;
             return this;
         }
 

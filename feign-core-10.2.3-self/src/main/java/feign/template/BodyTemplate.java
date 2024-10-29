@@ -4,7 +4,7 @@
 package feign.template;
 
 import feign.Util;
-
+import feign.template.Template;
 import java.nio.charset.Charset;
 import java.util.Map;
 
@@ -20,8 +20,12 @@ extends Template {
         return new BodyTemplate(template, Util.UTF_8);
     }
 
+    public static BodyTemplate create(String template, Charset charset) {
+        return new BodyTemplate(template, charset);
+    }
+
     private BodyTemplate(String value, Charset charset) {
-        super(value, Template.ExpansionOptions.ALLOW_UNRESOLVED, Template.EncodingOptions.NOT_REQUIRED, false, charset);
+        super(value, ExpansionOptions.ALLOW_UNRESOLVED, EncodingOptions.NOT_REQUIRED, false, charset);
         if (value.startsWith(JSON_TOKEN_START_ENCODED) && value.endsWith(JSON_TOKEN_END_ENCODED)) {
             this.json = true;
         }
@@ -31,11 +35,8 @@ extends Template {
     public String expand(Map<String, ?> variables) {
         String expanded = super.expand(variables);
         if (this.json) {
-            StringBuilder sb = new StringBuilder();
-            sb.append(JSON_TOKEN_START);
-            sb.append(expanded, expanded.indexOf(JSON_TOKEN_START_ENCODED) + JSON_TOKEN_START_ENCODED.length(), expanded.lastIndexOf(JSON_TOKEN_END_ENCODED));
-            sb.append(JSON_TOKEN_END);
-            return sb.toString();
+            expanded = expanded.replaceAll(JSON_TOKEN_START_ENCODED, JSON_TOKEN_START);
+            expanded = expanded.replaceAll(JSON_TOKEN_END_ENCODED, JSON_TOKEN_END);
         }
         return expanded;
     }

@@ -3,44 +3,54 @@
  */
 package feign.querymap;
 
+import feign.Param;
 import feign.QueryMapEncoder;
 import feign.codec.EncodeException;
 import java.lang.reflect.Field;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class FieldQueryMapEncoder
 implements QueryMapEncoder {
-    private final Map<Class<?>, ObjectParamMetadata> classToMetadata = new HashMap();
+    private final Map<Class<?>, ObjectParamMetadata> classToMetadata = new ConcurrentHashMap();
 
     @Override
     public Map<String, Object> encode(Object object) throws EncodeException {
+        ObjectParamMetadata metadata = this.classToMetadata.computeIfAbsent(object.getClass(), x$0 -> ObjectParamMetadata.parseObjectType(x$0));
+        return metadata.objectFields.stream().map(field -> this.FieldValuePair(object, (Field)field)).filter(fieldObjectPair -> ((Optional)fieldObjectPair.right).isPresent()).collect(Collectors.toMap(this::fieldName, fieldObjectPair -> ((Optional)fieldObjectPair.right).get()));
+    }
+
+    private String fieldName(Pair<Field, Optional<Object>> pair) {
+        Param alias = ((Field)pair.left).getAnnotation(Param.class);
+        return alias != null ? alias.value() : ((Field)pair.left).getName();
+    }
+
+    private Pair<Field, Optional<Object>> FieldValuePair(Object object, Field field) {
         try {
-            ObjectParamMetadata metadata = this.getMetadata(object.getClass());
-            HashMap<String, Object> fieldNameToValue = new HashMap<String, Object>();
-            for (Field field : metadata.objectFields) {
-                Object value = field.get(object);
-                if (value == null || value == object) continue;
-                fieldNameToValue.put(field.getName(), value);
-            }
-            return fieldNameToValue;
+            return Pair.pair(field, Optional.ofNullable(field.get(object)));
         }
         catch (IllegalAccessException e) {
             throw new EncodeException("Failure encoding object into query map", e);
         }
     }
 
-    private ObjectParamMetadata getMetadata(Class<?> objectType) {
-        ObjectParamMetadata metadata = this.classToMetadata.get(objectType);
-        if (metadata == null) {
-            metadata = ObjectParamMetadata.parseObjectType(objectType);
-            this.classToMetadata.put(objectType, metadata);
+    private static class Pair<T, U> {
+        public final T left;
+        public final U right;
+
+        private Pair(T left, U right) {
+            this.right = right;
+            this.left = left;
         }
-        return metadata;
+
+        public static <T, U> Pair<T, U> pair(T left, U right) {
+            return new Pair<T, U>(left, right);
+        }
     }
 
     private static class ObjectParamMetadata {
@@ -51,7 +61,11 @@ implements QueryMapEncoder {
         }
 
         private static ObjectParamMetadata parseObjectType(Class<?> type) {
-            return new ObjectParamMetadata(Arrays.stream(type.getDeclaredFields()).filter(field -> !field.isSynthetic()).peek(field -> field.setAccessible(true)).collect(Collectors.toList()));
+            ArrayList allFields = new ArrayList();
+            for (Class<?> currentClass = type; currentClass != null; currentClass = currentClass.getSuperclass()) {
+                Collections.addAll(allFields, currentClass.getDeclaredFields());
+            }
+            return new ObjectParamMetadata(allFields.stream().filter(field -> !field.isSynthetic()).peek(field -> field.setAccessible(true)).collect(Collectors.toList()));
         }
     }
 }

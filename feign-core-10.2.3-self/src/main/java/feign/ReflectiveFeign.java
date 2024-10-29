@@ -3,6 +3,18 @@
  */
 package feign;
 
+import feign.Contract;
+import feign.DefaultMethodHandler;
+import feign.Feign;
+import feign.InvocationHandlerFactory;
+import feign.MethodMetadata;
+import feign.Param;
+import feign.QueryMapEncoder;
+import feign.Request;
+import feign.RequestTemplate;
+import feign.SynchronousMethodHandler;
+import feign.Target;
+import feign.Util;
 import feign.codec.Decoder;
 import feign.codec.EncodeException;
 import feign.codec.Encoder;
@@ -11,6 +23,7 @@ import feign.template.UriUtils;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -57,17 +70,26 @@ extends Feign {
     extends BuildTemplateByResolvingArgs {
         private final Encoder encoder;
 
-        private BuildEncodedTemplateFromArgs(MethodMetadata metadata, Encoder encoder, QueryMapEncoder queryMapEncoder) {
-            super(metadata, queryMapEncoder);
+        private BuildEncodedTemplateFromArgs(MethodMetadata metadata, Encoder encoder, QueryMapEncoder queryMapEncoder, Target target) {
+            super(metadata, queryMapEncoder, target);
             this.encoder = encoder;
         }
 
         @Override
         protected RequestTemplate resolve(Object[] argv, RequestTemplate mutable, Map<String, Object> variables) {
-            Object body = argv[this.metadata.bodyIndex()];
-            Util.checkArgument(body != null, "Body parameter %s was null", this.metadata.bodyIndex());
+            boolean alwaysEncodeBody = mutable.methodMetadata().alwaysEncodeBody();
+            Object[] body = null;
+            if (!alwaysEncodeBody) {
+                body = argv[this.metadata.bodyIndex()];
+                Util.checkArgument(body != null, "Body parameter %s was null", this.metadata.bodyIndex());
+            }
             try {
-                this.encoder.encode(body, this.metadata.bodyType(), mutable);
+                if (alwaysEncodeBody) {
+                    body = argv == null ? new Object[]{} : argv;
+                    this.encoder.encode(body, (Type)((Object)Object[].class), mutable);
+                } else {
+                    this.encoder.encode(body, this.metadata.bodyType(), mutable);
+                }
             }
             catch (EncodeException e) {
                 throw e;
@@ -83,8 +105,8 @@ extends Feign {
     extends BuildTemplateByResolvingArgs {
         private final Encoder encoder;
 
-        private BuildFormEncodedTemplateFromArgs(MethodMetadata metadata, Encoder encoder, QueryMapEncoder queryMapEncoder) {
-            super(metadata, queryMapEncoder);
+        private BuildFormEncodedTemplateFromArgs(MethodMetadata metadata, Encoder encoder, QueryMapEncoder queryMapEncoder, Target target) {
+            super(metadata, queryMapEncoder, target);
             this.encoder = encoder;
         }
 
@@ -112,10 +134,12 @@ extends Feign {
     implements RequestTemplate.Factory {
         private final QueryMapEncoder queryMapEncoder;
         protected final MethodMetadata metadata;
+        protected final Target<?> target;
         private final Map<Integer, Param.Expander> indexToExpander = new LinkedHashMap<Integer, Param.Expander>();
 
-        private BuildTemplateByResolvingArgs(MethodMetadata metadata, QueryMapEncoder queryMapEncoder) {
+        private BuildTemplateByResolvingArgs(MethodMetadata metadata, QueryMapEncoder queryMapEncoder, Target target) {
             this.metadata = metadata;
+            this.target = target;
             this.queryMapEncoder = queryMapEncoder;
             if (metadata.indexToExpander() != null) {
                 this.indexToExpander.putAll(metadata.indexToExpander());
@@ -139,7 +163,9 @@ extends Feign {
 
         @Override
         public RequestTemplate create(Object[] argv) {
+            Object value;
             RequestTemplate mutable = RequestTemplate.from(this.metadata.template());
+            mutable.feignTarget(this.target);
             if (this.metadata.urlIndex() != null) {
                 int urlIndex = this.metadata.urlIndex();
                 Util.checkArgument(argv[urlIndex] != null, "URI parameter %s was null", urlIndex);
@@ -148,23 +174,25 @@ extends Feign {
             LinkedHashMap<String, Object> varBuilder = new LinkedHashMap<String, Object>();
             for (Map.Entry<Integer, Collection<String>> entry : this.metadata.indexToName().entrySet()) {
                 int i = entry.getKey();
-                Object value = argv[entry.getKey()];
-                if (value == null) continue;
+                Object value2 = argv[entry.getKey()];
+                if (value2 == null) continue;
                 if (this.indexToExpander.containsKey(i)) {
-                    value = this.expandElements(this.indexToExpander.get(i), value);
+                    value2 = this.expandElements(this.indexToExpander.get(i), value2);
                 }
                 for (String name : entry.getValue()) {
-                    varBuilder.put(name, value);
+                    varBuilder.put(name, value2);
                 }
             }
             RequestTemplate template = this.resolve(argv, mutable, varBuilder);
             if (this.metadata.queryMapIndex() != null) {
-                Object value = argv[this.metadata.queryMapIndex()];
+                value = argv[this.metadata.queryMapIndex()];
                 Map<String, Object> queryMap = this.toQueryMap(value);
                 template = this.addQueryMapQueryParameters(queryMap, template);
             }
             if (this.metadata.headerMapIndex() != null) {
-                template = this.addHeaderMapHeaders((Map)argv[this.metadata.headerMapIndex()], template);
+                value = argv[this.metadata.headerMapIndex()];
+                Map<String, Object> headerMap = this.toQueryMap(value);
+                template = this.addHeaderMapHeaders(headerMap, template);
             }
             return template;
         }
@@ -216,16 +244,20 @@ extends Feign {
         private RequestTemplate addQueryMapQueryParameters(Map<String, Object> queryMap, RequestTemplate mutable) {
             for (Map.Entry<String, Object> currEntry : queryMap.entrySet()) {
                 ArrayList<String> values = new ArrayList<String>();
-                boolean encoded = this.metadata.queryMapEncoded();
                 Object currValue = currEntry.getValue();
                 if (currValue instanceof Iterable) {
                     for (Object nextObject : (Iterable)currValue) {
-                        values.add(nextObject == null ? null : (encoded ? nextObject.toString() : UriUtils.encode(nextObject.toString())));
+                        values.add(nextObject == null ? null : UriUtils.encode(nextObject.toString()));
                     }
-                } else {
-                    values.add(currValue == null ? null : (encoded ? currValue.toString() : UriUtils.encode(currValue.toString())));
+                } else if (currValue instanceof Object[]) {
+                    for (Object value : (Object[])currValue) {
+                        values.add(value == null ? null : UriUtils.encode(value.toString()));
+                    }
+                } else if (currValue != null) {
+                    values.add(UriUtils.encode(currValue.toString()));
                 }
-                mutable.query(encoded ? currEntry.getKey() : UriUtils.encode(currEntry.getKey()), values);
+                if (values.size() <= 0) continue;
+                mutable.query(UriUtils.encode(currEntry.getKey()), values);
             }
             return mutable;
         }
@@ -254,12 +286,18 @@ extends Feign {
             this.decoder = Util.checkNotNull(decoder, "decoder", new Object[0]);
         }
 
-        public Map<String, InvocationHandlerFactory.MethodHandler> apply(Target key) {
-            List<MethodMetadata> metadata = this.contract.parseAndValidatateMetadata(key.type());
+        public Map<String, InvocationHandlerFactory.MethodHandler> apply(Target target) {
+            List<MethodMetadata> metadata = this.contract.parseAndValidateMetadata(target.type());
             LinkedHashMap<String, InvocationHandlerFactory.MethodHandler> result = new LinkedHashMap<String, InvocationHandlerFactory.MethodHandler>();
             for (MethodMetadata md : metadata) {
-                BuildTemplateByResolvingArgs buildTemplate = !md.formParams().isEmpty() && md.template().bodyTemplate() == null ? new BuildFormEncodedTemplateFromArgs(md, this.encoder, this.queryMapEncoder) : (md.bodyIndex() != null ? new BuildEncodedTemplateFromArgs(md, this.encoder, this.queryMapEncoder) : new BuildTemplateByResolvingArgs(md, this.queryMapEncoder));
-                result.put(md.configKey(), this.factory.create(key, md, buildTemplate, this.options, this.decoder, this.errorDecoder));
+                BuildTemplateByResolvingArgs buildTemplate = !md.formParams().isEmpty() && md.template().bodyTemplate() == null ? new BuildFormEncodedTemplateFromArgs(md, this.encoder, this.queryMapEncoder, target) : (md.bodyIndex() != null || md.alwaysEncodeBody() ? new BuildEncodedTemplateFromArgs(md, this.encoder, this.queryMapEncoder, target) : new BuildTemplateByResolvingArgs(md, this.queryMapEncoder, target));
+                if (md.isIgnored()) {
+                    result.put(md.configKey(), args -> {
+                        throw new IllegalStateException(md.configKey() + " is not a method handled by feign");
+                    });
+                    continue;
+                }
+                result.put(md.configKey(), this.factory.create(target, md, buildTemplate, this.options, this.decoder, this.errorDecoder));
             }
             return result;
         }

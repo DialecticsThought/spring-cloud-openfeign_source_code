@@ -3,6 +3,7 @@
  */
 package feign;
 
+import feign.RetryableException;
 import java.util.concurrent.TimeUnit;
 
 public interface Retryer

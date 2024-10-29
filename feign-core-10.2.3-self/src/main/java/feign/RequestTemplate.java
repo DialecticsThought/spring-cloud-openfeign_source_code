@@ -3,6 +3,13 @@
  */
 package feign;
 
+import feign.CollectionFormat;
+import feign.Experimental;
+import feign.MethodMetadata;
+import feign.Request;
+import feign.Target;
+import feign.Util;
+import feign.template.BodyTemplate;
 import feign.template.HeaderTemplate;
 import feign.template.QueryTemplate;
 import feign.template.UriTemplate;
@@ -34,28 +41,34 @@ implements Serializable {
     private String fragment;
     private boolean resolved = false;
     private UriTemplate uriTemplate;
+    private BodyTemplate bodyTemplate;
     private Request.HttpMethod method;
     private transient Charset charset = Util.UTF_8;
     private Request.Body body = Request.Body.empty();
     private boolean decodeSlash = true;
     private CollectionFormat collectionFormat = CollectionFormat.EXPLODED;
+    private MethodMetadata methodMetadata;
+    private Target<?> feignTarget;
 
     public RequestTemplate() {
     }
 
-    private RequestTemplate(String target, String fragment, UriTemplate uriTemplate, Request.HttpMethod method, Charset charset, Request.Body body, boolean decodeSlash, CollectionFormat collectionFormat) {
+    private RequestTemplate(String target, String fragment, UriTemplate uriTemplate, BodyTemplate bodyTemplate, Request.HttpMethod method, Charset charset, Request.Body body, boolean decodeSlash, CollectionFormat collectionFormat, MethodMetadata methodMetadata, Target<?> feignTarget) {
         this.target = target;
         this.fragment = fragment;
         this.uriTemplate = uriTemplate;
+        this.bodyTemplate = bodyTemplate;
         this.method = method;
         this.charset = charset;
         this.body = body;
         this.decodeSlash = decodeSlash;
         this.collectionFormat = collectionFormat != null ? collectionFormat : CollectionFormat.EXPLODED;
+        this.methodMetadata = methodMetadata;
+        this.feignTarget = feignTarget;
     }
 
     public static RequestTemplate from(RequestTemplate requestTemplate) {
-        RequestTemplate template = new RequestTemplate(requestTemplate.target, requestTemplate.fragment, requestTemplate.uriTemplate, requestTemplate.method, requestTemplate.charset, requestTemplate.body, requestTemplate.decodeSlash, requestTemplate.collectionFormat);
+        RequestTemplate template = new RequestTemplate(requestTemplate.target, requestTemplate.fragment, requestTemplate.uriTemplate, requestTemplate.bodyTemplate, requestTemplate.method, requestTemplate.charset, requestTemplate.body, requestTemplate.decodeSlash, requestTemplate.collectionFormat, requestTemplate.methodMetadata, requestTemplate.feignTarget);
         if (!requestTemplate.queries().isEmpty()) {
             template.queries.putAll(requestTemplate.queries);
         }
@@ -78,16 +91,23 @@ implements Serializable {
         this.decodeSlash = toCopy.decodeSlash;
         this.collectionFormat = toCopy.collectionFormat != null ? toCopy.collectionFormat : CollectionFormat.EXPLODED;
         this.uriTemplate = toCopy.uriTemplate;
+        this.bodyTemplate = toCopy.bodyTemplate;
         this.resolved = false;
+        this.methodMetadata = toCopy.methodMetadata;
+        this.target = toCopy.target;
+        this.feignTarget = toCopy.feignTarget;
     }
 
     public RequestTemplate resolve(Map<String, ?> variables) {
+        String expanded;
         StringBuilder uri = new StringBuilder();
         RequestTemplate resolved = RequestTemplate.from(this);
         if (this.uriTemplate == null) {
             this.uriTemplate = UriTemplate.create("", !this.decodeSlash, this.charset);
         }
-        uri.append(this.uriTemplate.expand(variables));
+        if ((expanded = this.uriTemplate.expand(variables)) != null) {
+            uri.append(expanded);
+        }
         if (!this.queries.isEmpty()) {
             resolved.queries(Collections.emptyMap());
             StringBuilder query = new StringBuilder();
@@ -115,13 +135,14 @@ implements Serializable {
         if (!this.headers.isEmpty()) {
             resolved.headers(Collections.emptyMap());
             for (HeaderTemplate headerTemplate : this.headers.values()) {
-                String headerValues;
                 String header = headerTemplate.expand(variables);
-                if (header.isEmpty() || (headerValues = header.substring(header.indexOf(" ") + 1)).isEmpty()) continue;
-                resolved.header(headerTemplate.getName(), headerValues);
+                if (header.isEmpty()) continue;
+                resolved.header(headerTemplate.getName(), header);
             }
         }
-        resolved.body(this.body.expand(variables));
+        if (this.bodyTemplate != null) {
+            resolved.body(this.bodyTemplate.expand(variables));
+        }
         resolved.resolved = true;
         return resolved;
     }
@@ -135,7 +156,7 @@ implements Serializable {
         if (!this.resolved) {
             throw new IllegalStateException("template has not been resolved.");
         }
-        return Request.create(this.method, this.url(), this.headers(), this.requestBody());
+        return Request.create(this.method, this.url(), this.headers(), this.body, this);
     }
 
     @Deprecated
@@ -163,6 +184,9 @@ implements Serializable {
     public RequestTemplate decodeSlash(boolean decodeSlash) {
         this.decodeSlash = decodeSlash;
         this.uriTemplate = UriTemplate.create(this.uriTemplate.toString(), !this.decodeSlash, this.charset);
+        if (!this.queries.isEmpty()) {
+            this.queries.replaceAll((key, queryTemplate) -> QueryTemplate.create(queryTemplate.getName(), queryTemplate.getValues(), this.charset, this.collectionFormat, decodeSlash));
+        }
         return this;
     }
 
@@ -203,7 +227,7 @@ implements Serializable {
         }
         if (uri == null) {
             uri = "/";
-        } else if (!(uri.isEmpty() || uri.startsWith("/") || uri.startsWith("{") || uri.startsWith("?"))) {
+        } else if (!(uri.isEmpty() || uri.startsWith("/") || uri.startsWith("{") || uri.startsWith("?") || uri.startsWith(";"))) {
             uri = "/" + uri;
         }
         Matcher queryMatcher = QUERY_STRING_PATTERN.matcher(uri);
@@ -279,7 +303,9 @@ implements Serializable {
         for (HeaderTemplate headerTemplate : this.headers.values()) {
             variables.addAll(headerTemplate.getVariables());
         }
-        variables.addAll(this.body.getVariables());
+        if (this.bodyTemplate != null) {
+            variables.addAll(this.bodyTemplate.getVariables());
+        }
         return variables;
     }
 
@@ -305,9 +331,9 @@ implements Serializable {
         }
         this.queries.compute(name, (key, queryTemplate) -> {
             if (queryTemplate == null) {
-                return QueryTemplate.create(name, values, this.charset, collectionFormat);
+                return QueryTemplate.create(name, values, this.charset, collectionFormat, this.decodeSlash);
             }
-            return QueryTemplate.append(queryTemplate, values, collectionFormat);
+            return QueryTemplate.append(queryTemplate, values, collectionFormat, this.decodeSlash);
         });
         return this;
     }
@@ -344,9 +370,22 @@ implements Serializable {
         return this.appendHeader(name, values);
     }
 
+    public RequestTemplate removeHeader(String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("name is required.");
+        }
+        this.headers.remove(name);
+        return this;
+    }
+
     private RequestTemplate appendHeader(String name, Iterable<String> values) {
         if (!values.iterator().hasNext()) {
             this.headers.remove(name);
+            return this;
+        }
+        if (name.equals("Content-Type")) {
+            this.headers.remove(name);
+            this.headers.put(name, HeaderTemplate.create(name, Collections.singletonList(values.iterator().next())));
             return this;
         }
         this.headers.compute(name, (headerName, headerTemplate) -> {
@@ -378,21 +417,21 @@ implements Serializable {
         return Collections.unmodifiableMap(headerMap);
     }
 
-    @Deprecated
-    public RequestTemplate body(byte[] bodyData, Charset charset) {
-        this.body(Request.Body.encoded(bodyData, charset));
+    public RequestTemplate body(byte[] data, Charset charset) {
+        this.body(Request.Body.create(data, charset));
+        return this;
+    }
+
+    public RequestTemplate body(String bodyText) {
+        this.body(Request.Body.create(bodyText.getBytes(this.charset), this.charset));
         return this;
     }
 
     @Deprecated
-    public RequestTemplate body(String bodyText) {
-        byte[] bodyData = bodyText != null ? bodyText.getBytes(Util.UTF_8) : null;
-        return this.body(bodyData, Util.UTF_8);
-    }
-
     public RequestTemplate body(Request.Body body) {
         this.body = body;
-        this.header("Content-Length", new String[0]);
+        this.bodyTemplate = null;
+        this.header("Content-Length", Collections.emptyList());
         if (body.length() > 0) {
             this.header("Content-Length", String.valueOf(body.length()));
         }
@@ -400,22 +439,37 @@ implements Serializable {
     }
 
     public Charset requestCharset() {
+        if (this.body != null) {
+            return this.body.getEncoding().orElse(this.charset);
+        }
         return this.charset;
     }
 
-    @Deprecated
     public byte[] body() {
         return this.body.asBytes();
     }
 
     @Deprecated
+    public Request.Body requestBody() {
+        return this.body;
+    }
+
     public RequestTemplate bodyTemplate(String bodyTemplate) {
-        this.body(Request.Body.bodyTemplate(bodyTemplate, Util.UTF_8));
+        this.bodyTemplate = BodyTemplate.create(bodyTemplate, this.charset);
+        return this;
+    }
+
+    public RequestTemplate bodyTemplate(String bodyTemplate, Charset charset) {
+        this.bodyTemplate = BodyTemplate.create(bodyTemplate, charset);
+        this.charset = charset;
         return this;
     }
 
     public String bodyTemplate() {
-        return this.body.bodyTemplate();
+        if (this.bodyTemplate != null) {
+            return this.bodyTemplate.toString();
+        }
+        return null;
     }
 
     public String toString() {
@@ -475,8 +529,26 @@ implements Serializable {
         return new AbstractMap.SimpleImmutableEntry<String, Object>(name, value);
     }
 
-    public Request.Body requestBody() {
-        return this.body;
+    @Experimental
+    public RequestTemplate methodMetadata(MethodMetadata methodMetadata) {
+        this.methodMetadata = methodMetadata;
+        return this;
+    }
+
+    @Experimental
+    public RequestTemplate feignTarget(Target<?> feignTarget) {
+        this.feignTarget = feignTarget;
+        return this;
+    }
+
+    @Experimental
+    public MethodMetadata methodMetadata() {
+        return this.methodMetadata;
+    }
+
+    @Experimental
+    public Target<?> feignTarget() {
+        return this.feignTarget;
     }
 
     static interface Factory {

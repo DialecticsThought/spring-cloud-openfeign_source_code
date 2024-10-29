@@ -7,7 +7,7 @@
 		<version>2.2.11.BUILD-SNAPSHOT</version>
 	</parent>
 
-	<artifactId>feign-core-10.2.3-self</artifactId>
+	<artifactId>10-self-download</artifactId>
 	<packaging>jar</packaging>
 
 	<name>feign-core-10.2.3-self</name>

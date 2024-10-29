@@ -3,7 +3,9 @@
  */
 package feign.template;
 
-class Literal
+import feign.template.TemplateChunk;
+
+public class Literal
 implements TemplateChunk {
     private final String value;
 

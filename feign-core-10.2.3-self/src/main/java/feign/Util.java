@@ -3,6 +3,7 @@
  */
 package feign;
 
+import feign.Types;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
@@ -10,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.lang.reflect.Array;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -20,14 +22,19 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -100,7 +107,8 @@ public class Util {
     }
 
     public static <T> Collection<T> valuesOrEmpty(Map<String, Collection<T>> map, String key) {
-        return map.containsKey(key) && map.get(key) != null ? map.get(key) : Collections.emptyList();
+        Collection<T> values = map.get(key);
+        return values != null ? values : Collections.emptyList();
     }
 
     public static void ensureClosed(Closeable closeable) {
@@ -199,6 +207,41 @@ public class Util {
 
     public static boolean isBlank(String value) {
         return value == null || value.isEmpty();
+    }
+
+    public static Map<String, Collection<String>> caseInsensitiveCopyOf(Map<String, Collection<String>> map) {
+        if (map == null) {
+            return Collections.emptyMap();
+        }
+        TreeMap<String, Collection> result = new TreeMap<String, Collection>(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<String, Collection<String>> entry : map.entrySet()) {
+            String key2 = entry.getKey();
+            if (!result.containsKey(key2)) {
+                result.put(key2.toLowerCase(Locale.ROOT), new LinkedList());
+            }
+            ((Collection)result.get(key2)).addAll(entry.getValue());
+        }
+        result.replaceAll((key, value) -> Collections.unmodifiableCollection(value));
+        return Collections.unmodifiableMap(result);
+    }
+
+    public static <T extends Enum<?>> T enumForName(Class<T> enumClass, Object object) {
+        String name = Objects.nonNull(object) ? object.toString() : null;
+        for (Enum enumItem : (Enum[])enumClass.getEnumConstants()) {
+            if (!enumItem.name().equalsIgnoreCase(name) && !enumItem.toString().equalsIgnoreCase(name)) continue;
+            return (T)enumItem;
+        }
+        return null;
+    }
+
+    public static List<Field> allFields(Class<?> clazz) {
+        if (Objects.equals(clazz, Object.class)) {
+            return Collections.emptyList();
+        }
+        ArrayList<Field> fields = new ArrayList<Field>();
+        fields.addAll(Arrays.asList(clazz.getDeclaredFields()));
+        fields.addAll(Util.allFields(clazz.getSuperclass()));
+        return fields;
     }
 
     static {

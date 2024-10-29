@@ -6,7 +6,8 @@ package feign.codec;
 import feign.FeignException;
 import feign.Response;
 import feign.Util;
-
+import feign.codec.DecodeException;
+import feign.codec.StringDecoder;
 import java.io.IOException;
 import java.lang.reflect.Type;
 

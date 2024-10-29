@@ -4,7 +4,7 @@
 package feign.template;
 
 @FunctionalInterface
-interface TemplateChunk {
+public interface TemplateChunk {
     public String getValue();
 }
 

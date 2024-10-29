@@ -3,6 +3,8 @@
  */
 package feign;
 
+import feign.FeignException;
+import feign.Request;
 import java.util.Date;
 
 public class RetryableException
@@ -11,14 +13,14 @@ extends FeignException {
     private final Long retryAfter;
     private final Request.HttpMethod httpMethod;
 
-    public RetryableException(int status, String message, Request.HttpMethod httpMethod, Throwable cause, Date retryAfter) {
-        super(status, message, cause);
+    public RetryableException(int status, String message, Request.HttpMethod httpMethod, Throwable cause, Date retryAfter, Request request) {
+        super(status, message, request, cause);
         this.httpMethod = httpMethod;
         this.retryAfter = retryAfter != null ? Long.valueOf(retryAfter.getTime()) : null;
     }
 
-    public RetryableException(int status, String message, Request.HttpMethod httpMethod, Date retryAfter) {
-        super(status, message);
+    public RetryableException(int status, String message, Request.HttpMethod httpMethod, Date retryAfter, Request request) {
+        super(status, message, request);
         this.httpMethod = httpMethod;
         this.retryAfter = retryAfter != null ? Long.valueOf(retryAfter.getTime()) : null;
     }

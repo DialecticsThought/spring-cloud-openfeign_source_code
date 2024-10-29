@@ -42,7 +42,8 @@ public interface ErrorDecoder {
             if (retryAfter == null) {
                 return null;
             }
-            if (retryAfter.matches("^[0-9]+$")) {
+            if (retryAfter.matches("^[0-9]+\\.?0*$")) {
+                retryAfter = retryAfter.replaceAll("\\.0*$", "");
                 long deltaMillis = TimeUnit.SECONDS.toMillis(Long.parseLong(retryAfter));
                 return new Date(this.currentTimeMillis() + deltaMillis);
             }
@@ -67,7 +68,7 @@ public interface ErrorDecoder {
             FeignException exception = FeignException.errorStatus(methodKey, response);
             Date retryAfter = this.retryAfterDecoder.apply((String)this.firstOrNull(response.headers(), "Retry-After"));
             if (retryAfter != null) {
-                return new RetryableException(response.status(), exception.getMessage(), response.request().httpMethod(), exception, retryAfter);
+                return new RetryableException(response.status(), exception.getMessage(), response.request().httpMethod(), (Throwable)exception, retryAfter, response.request());
             }
             return exception;
         }

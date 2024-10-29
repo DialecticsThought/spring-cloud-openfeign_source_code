@@ -3,6 +3,10 @@
  */
 package feign;
 
+import feign.Request;
+import feign.RequestTemplate;
+import feign.Util;
+
 public interface Target<T> {
     public Class<T> type();
 

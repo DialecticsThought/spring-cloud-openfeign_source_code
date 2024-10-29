@@ -5,7 +5,7 @@ package feign.codec;
 
 import feign.RequestTemplate;
 import feign.Util;
-
+import feign.codec.EncodeException;
 import java.lang.reflect.Type;
 
 public interface Encoder {

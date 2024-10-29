@@ -3,9 +3,13 @@
  */
 package feign;
 
+import feign.Request;
+import feign.Response;
+import feign.Util;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Objects;
 import java.util.logging.FileHandler;
 import java.util.logging.LogRecord;
 import java.util.logging.SimpleFormatter;
@@ -17,19 +21,29 @@ public abstract class Logger {
 
     protected abstract void log(String var1, String var2, Object ... var3);
 
+    protected boolean shouldLogRequestHeader(String header) {
+        return true;
+    }
+
+    protected boolean shouldLogResponseHeader(String header) {
+        return true;
+    }
+
     protected void logRequest(String configKey, Level logLevel, Request request) {
-        this.log(configKey, "---> %s %s HTTP/1.1", request.httpMethod().name(), request.url());
+        String protocolVersion = Logger.resolveProtocolVersion(request.protocolVersion());
+        this.log(configKey, "---> %s %s %s", request.httpMethod().name(), request.url(), protocolVersion);
         if (logLevel.ordinal() >= Level.HEADERS.ordinal()) {
             for (String field : request.headers().keySet()) {
+                if (!this.shouldLogRequestHeader(field)) continue;
                 for (String value : Util.valuesOrEmpty(request.headers(), field)) {
                     this.log(configKey, "%s: %s", field, value);
                 }
             }
             int bodyLength = 0;
-            if (request.requestBody().asBytes() != null) {
-                bodyLength = request.requestBody().asBytes().length;
+            if (request.body() != null) {
+                bodyLength = request.length();
                 if (logLevel.ordinal() >= Level.FULL.ordinal()) {
-                    String bodyText = request.charset() != null ? new String(request.requestBody().asBytes(), request.charset()) : null;
+                    String bodyText = request.charset() != null ? new String(request.body(), request.charset()) : null;
                     this.log(configKey, "", new Object[0]);
                     this.log(configKey, "%s", bodyText != null ? bodyText : "Binary data");
                 }
@@ -43,11 +57,13 @@ public abstract class Logger {
     }
 
     protected Response logAndRebufferResponse(String configKey, Level logLevel, Response response, long elapsedTime) throws IOException {
+        String protocolVersion = Logger.resolveProtocolVersion(response.protocolVersion());
         String reason = response.reason() != null && logLevel.compareTo(Level.NONE) > 0 ? " " + response.reason() : "";
         int status = response.status();
-        this.log(configKey, "<--- HTTP/1.1 %s%s (%sms)", status, reason, elapsedTime);
+        this.log(configKey, "<--- %s %s%s (%sms)", protocolVersion, status, reason, elapsedTime);
         if (logLevel.ordinal() >= Level.HEADERS.ordinal()) {
             for (String field : response.headers().keySet()) {
+                if (!this.shouldLogResponseHeader(field)) continue;
                 for (String value : Util.valuesOrEmpty(response.headers(), field)) {
                     this.log(configKey, "%s: %s", field, value);
                 }
@@ -81,6 +97,13 @@ public abstract class Logger {
         return ioe;
     }
 
+    protected static String resolveProtocolVersion(Request.ProtocolVersion protocolVersion) {
+        if (Objects.nonNull((Object)protocolVersion)) {
+            return protocolVersion.toString();
+        }
+        return "UNKNOWN";
+    }
+
     public static class NoOpLogger
     extends Logger {
         @Override
@@ -99,7 +122,20 @@ public abstract class Logger {
 
     public static class JavaLogger
     extends Logger {
-        final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(Logger.class.getName());
+        final java.util.logging.Logger logger;
+
+        @Deprecated
+        public JavaLogger() {
+            this.logger = java.util.logging.Logger.getLogger(Logger.class.getName());
+        }
+
+        public JavaLogger(String loggerName) {
+            this.logger = java.util.logging.Logger.getLogger(loggerName);
+        }
+
+        public JavaLogger(Class<?> clazz) {
+            this.logger = java.util.logging.Logger.getLogger(clazz.getName());
+        }
 
         @Override
         protected void logRequest(String configKey, Level logLevel, Request request) {

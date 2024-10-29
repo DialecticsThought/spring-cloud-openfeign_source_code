@@ -6,7 +6,7 @@ package feign.auth;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import feign.Util;
-
+import feign.auth.Base64;
 import java.nio.charset.Charset;
 
 public class BasicAuthRequestInterceptor
