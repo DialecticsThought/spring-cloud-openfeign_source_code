@@ -215,6 +215,7 @@ class FeignClientsRegistrar
 			.getAnnotationAttributes(EnableFeignClients.class.getName());
 		// 获取 `clients` 属性值，如果存在，则直接使用；否则，`clients` 为空或为 null
 		// `clients` 数组用于指定具体的 Feign 客户端类
+		// “客户端类”指的是用 @FeignClient 注解标注的接口
 		final Class<?>[] clients = attrs == null ? null
 			: (Class<?>[]) attrs.get("clients");
 		if (clients == null || clients.length == 0) {  // 如果 `clients` 为空，则意味着未指定具体类，需要基于包路径扫描找到候选类

@@ -42,25 +42,37 @@ import org.springframework.core.annotation.AliasFor;
 public @interface FeignClient {
 
 	/**
+	 * TODO
+	 * 	value 用于指定服务的名称，也可以包含可选的协议前缀（例如 http:// 或 https://）
+	 *    @FeignClient(value = "user-service") 会将客户端名称设置为 user-service。
+	 *
 	 * The name of the service with optional protocol prefix. Synonym for {@link #name()
 	 * name}. A name must be specified for all clients, whether or not a url is provided.
 	 * Can be specified as property key, eg: ${propertyKey}.
+	 *
 	 * @return the name of the service with optional protocol prefix
 	 */
-	@AliasFor("name")
-	String value() default "";
+	@AliasFor("name") // TODO 人话 就是value和name都可以 因为是别名
+		String value() default "";
 
 	/**
+	 * TODO 这是 value 属性的同义词，允许指定服务 ID，但已被废弃
 	 * The service id with optional protocol prefix. Synonym for {@link #value() value}.
-	 * @deprecated use {@link #name() name} instead
+	 *
 	 * @return the service id with optional protocol prefix
+	 * @deprecated use {@link #name() name} instead
 	 */
 	@Deprecated
 	String serviceId() default "";
 
 	/**
+	 * TODO
+	 * 	说明：定义 Feign 客户端 Bean 的名称，优先级高于 name，但不会作为服务 ID 使用。
+	 * 	作用：用于在 Spring 容器中生成 Bean 时指定 Bean 的 ID，主要用于在同一服务下使用多个客户端 Bean 以避免 Bean 名称冲突
+	 * 	示例：@FeignClient(contextId = "userServiceClient", name = "user-service") 将 userServiceClient 用作 Bean 名称，而 user-service 作为服务名。
 	 * This will be used as the bean name instead of name if present, but will not be used
 	 * as a service id.
+	 *
 	 * @return bean name instead of name if present
 	 */
 	String contextId() default "";
@@ -75,7 +87,7 @@ public @interface FeignClient {
 	/**
 	 * @return the <code>@Qualifier</code> value for the feign client.
 	 * @deprecated in favour of {@link #qualifiers()}.
-	 *
+	 * <p>
 	 * If both {@link #qualifier()} and {@link #qualifiers()} are present, we will use the
 	 * latter, unless the array returned by {@link #qualifiers()} is empty or only
 	 * contains <code>null</code> or whitespace values, in which case we'll fall back
@@ -86,8 +98,10 @@ public @interface FeignClient {
 	String qualifier() default "";
 
 	/**
-	 * @return the <code>@Qualifiers</code> value for the feign client.
+	 * TODO
 	 *
+	 * @return the <code>@Qualifiers</code> value for the feign client.
+	 * <p>
 	 * If both {@link #qualifier()} and {@link #qualifiers()} are present, we will use the
 	 * latter, unless the array returned by {@link #qualifiers()} is empty or only
 	 * contains <code>null</code> or whitespace values, in which case we'll fall back
@@ -97,6 +111,8 @@ public @interface FeignClient {
 	String[] qualifiers() default {};
 
 	/**
+	 * TODO 类似@RequestMapping声明的base url
+	 *
 	 * @return an absolute URL or resolvable hostname (the protocol is optional).
 	 */
 	String url() default "";
@@ -107,30 +123,38 @@ public @interface FeignClient {
 	boolean decode404() default false;
 
 	/**
+	 * TODO  client的配置，不同于@EnableFeignClients的defaultConfiguration，这个configuration只属于某个client
 	 * A custom configuration class for the feign client. Can contain override
 	 * <code>@Bean</code> definition for the pieces that make up the client, for instance
 	 * {@link feign.codec.Decoder}, {@link feign.codec.Encoder}, {@link feign.Contract}.
 	 *
-	 * @see FeignClientsConfiguration for the defaults
 	 * @return list of configurations for feign client
+	 * @see FeignClientsConfiguration for the defaults
 	 */
 	Class<?>[] configuration() default {};
 
 	/**
+	 * TODO 降级处理的实例，需实现FeignClient
+	 * <p>
 	 * Fallback class for the specified Feign client interface. The fallback class must
 	 * implement the interface annotated by this annotation and be a valid spring bean.
+	 *
 	 * @return fallback class for the specified Feign client interface
 	 */
 	Class<?> fallback() default void.class;
 
 	/**
+	 * TODO
+	 * 	降级处理实例的创建工厂，需实现FallbackFactory接口 推荐
+	 * 	本质是写一个标注了@FeignClient接口的实现类，实现类的每一个接口实现方法都是降级操作的方法
+	 * <p>
 	 * Define a fallback factory for the specified Feign client interface. The fallback
 	 * factory must produce instances of fallback classes that implement the interface
 	 * annotated by {@link FeignClient}. The fallback factory must be a valid spring bean.
 	 *
+	 * @return fallback factory for the specified Feign client interface
 	 * @see feign.hystrix.FallbackFactory for details.
 	 * @see FallbackFactory for details.
-	 * @return fallback factory for the specified Feign client interface
 	 */
 	Class<?> fallbackFactory() default void.class;
 
