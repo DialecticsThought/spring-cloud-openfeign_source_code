@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Import;
 
 /**
  * Scans for interfaces that declare they are feign clients (via
- * {@link org.springframework.cloud.openfeign.FeignClient} <code>@FeignClient</code>).
+ * {@link FeignClient} <code>@FeignClient</code>).
  * Configures component scanning directives for use with
  * {@link org.springframework.context.annotation.Configuration}
  * <code>@Configuration</code> classes.
@@ -42,6 +42,8 @@ import org.springframework.context.annotation.Import;
 public @interface EnableFeignClients {
 
 	/**
+	 *
+	 * TODO 用于指定要扫描的基础包
 	 * Alias for the {@link #basePackages()} attribute. Allows for more concise annotation
 	 * declarations e.g.: {@code @ComponentScan("org.my.pkg")} instead of
 	 * {@code @ComponentScan(basePackages="org.my.pkg")}.
@@ -50,6 +52,11 @@ public @interface EnableFeignClients {
 	String[] value() default {};
 
 	/**
+	 *
+	 * TODO
+	 * 	用于指定要扫描的基础包，用于查找带 @FeignClient 注解的类
+	 * 	value() 是它的别名，但二者是互斥的，不能同时使用。
+	 *
 	 * Base packages to scan for annotated components.
 	 * <p>
 	 * {@link #value()} is an alias for (and mutually exclusive with) this attribute.
@@ -61,6 +68,8 @@ public @interface EnableFeignClients {
 	String[] basePackages() default {};
 
 	/**
+	 *
+	 * TODO 为 basePackages() 提供了一个类型安全的替代方式，通过指定类来确定要扫描的包。
 	 * Type-safe alternative to {@link #basePackages()} for specifying the packages to
 	 * scan for annotated components. The package of each class specified will be scanned.
 	 * <p>
@@ -71,6 +80,9 @@ public @interface EnableFeignClients {
 	Class<?>[] basePackageClasses() default {};
 
 	/**
+	 * TODO
+	 * 	为所有 Feign 客户端提供自定义的 @Configuration 配置类。
+	 * 	可以通过该配置类覆盖默认的 Bean 定义，比如 Decoder、Encoder、Contract 等组件。
 	 * A custom <code>@Configuration</code> for all feign clients. Can contain override
 	 * <code>@Bean</code> definition for the pieces that make up the client, for instance
 	 * {@link feign.codec.Decoder}, {@link feign.codec.Encoder}, {@link feign.Contract}.
@@ -81,6 +93,7 @@ public @interface EnableFeignClients {
 	Class<?>[] defaultConfiguration() default {};
 
 	/**
+	 * TODO 直接列出要使用的 @FeignClient 注解类列表，如果该属性不为空，则会禁用类路径扫描
 	 * List of classes annotated with @FeignClient. If not empty, disables classpath
 	 * scanning.
 	 * @return list of FeignClient classes

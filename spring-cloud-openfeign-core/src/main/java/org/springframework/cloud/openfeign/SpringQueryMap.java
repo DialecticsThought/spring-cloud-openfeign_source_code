@@ -26,10 +26,10 @@ import feign.QueryMap;
 import org.springframework.core.annotation.AliasFor;
 
 /**
- * Spring MVC equivalent of OpenFeign's {@link feign.QueryMap} parameter annotation.
+ * Spring MVC equivalent of OpenFeign's {@link QueryMap} parameter annotation.
  *
  * @author Aram Peres
- * @see feign.QueryMap
+ * @see QueryMap
  * @see org.springframework.cloud.openfeign.annotation.QueryMapParameterProcessor
  */
 @Retention(RetentionPolicy.RUNTIME)

@@ -19,18 +19,18 @@ package org.springframework.cloud.openfeign;
 import feign.codec.ErrorDecoder;
 
 /**
- * Allows an application to use a custom Feign {@link feign.codec.ErrorDecoder}.
+ * Allows an application to use a custom Feign {@link ErrorDecoder}.
  *
  * @author Michael Cramer
  */
 public interface FeignErrorDecoderFactory {
 
 	/**
-	 * Factory method to provide a {@link feign.codec.ErrorDecoder} for a given
+	 * Factory method to provide a {@link ErrorDecoder} for a given
 	 * {@link Class}.
-	 * @param type the {@link Class} for which a {@link feign.codec.ErrorDecoder} instance
+	 * @param type the {@link Class} for which a {@link ErrorDecoder} instance
 	 * is to be created
-	 * @return a {@link feign.codec.ErrorDecoder} instance
+	 * @return a {@link ErrorDecoder} instance
 	 */
 	ErrorDecoder create(Class<?> type);
 

@@ -127,7 +127,7 @@ public class RetryableFeignLoadBalancer extends FeignLoadBalancer
 
 	@Override
 	public RequestSpecificRetryHandler getRequestSpecificRetryHandler(
-			FeignLoadBalancer.RibbonRequest request, IClientConfig requestConfig) {
+			RibbonRequest request, IClientConfig requestConfig) {
 		return new RequestSpecificRetryHandler(false, false, this.getRetryHandler(),
 				requestConfig);
 	}

@@ -35,9 +35,9 @@ import org.springframework.util.ConcurrentReferenceHashMap;
  * @author Gang Li
  */
 public class CachingSpringLoadBalancerFactory {
-
+	// ribbon相关 可以拿到 ILoadBalancer IClientConfig等等对象 这是ribbon整合feign关键
 	protected final SpringClientFactory factory;
-
+	// 带有充实策略的loadBalance工厂对象
 	protected LoadBalancedRetryFactory loadBalancedRetryFactory = null;
 
 	private volatile Map<String, FeignLoadBalancer> cache = new ConcurrentReferenceHashMap<>();
@@ -52,19 +52,28 @@ public class CachingSpringLoadBalancerFactory {
 		this.loadBalancedRetryFactory = loadBalancedRetryPolicyFactory;
 	}
 
+	/**
+	 * TODO 重点 本质是工厂模式
+	 *  CachingSpringLoadBalancerFactory是在FeignRibbonClientAutoConfiguration类中声明的
+	 * @param clientName
+	 * @return
+	 */
 	public FeignLoadBalancer create(String clientName) {
 		FeignLoadBalancer client = this.cache.get(clientName);
 		if (client != null) {
 			return client;
 		}
 		IClientConfig config = this.factory.getClientConfig(clientName);
+		// 得到 ribbon的ILoadBalancer对象 即ZoneAwareLoadBalancer对象的包装
 		ILoadBalancer lb = this.factory.getLoadBalancer(clientName);
 		ServerIntrospector serverIntrospector = this.factory.getInstance(clientName,
 				ServerIntrospector.class);
+		// 返回FeignLoadBalancer 实际上是对ZoneAwareLoadBalancer的包装实现负载均衡
 		client = this.loadBalancedRetryFactory != null
 				? new RetryableFeignLoadBalancer(lb, config, serverIntrospector,
 						this.loadBalancedRetryFactory)
 				: new FeignLoadBalancer(lb, config, serverIntrospector);
+		// 把申城的FeignLoadBalancer对象缓存到map
 		this.cache.put(clientName, client);
 		return client;
 	}

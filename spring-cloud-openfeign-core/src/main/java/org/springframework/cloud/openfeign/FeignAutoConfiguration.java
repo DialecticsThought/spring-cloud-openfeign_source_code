@@ -93,6 +93,10 @@ public class FeignAutoConfiguration {
 		return HasFeatures.namedFeature("Feign", Feign.class);
 	}
 
+	/**
+	 *  org.springframework.cloud.openfeign.FeignClientFactoryBean#getTarget() 用到
+	 * @return
+	 */
 	@Bean
 	public FeignContext feignContext() {
 		FeignContext context = new FeignContext();
