@@ -109,13 +109,14 @@ class FeignClientsRegistrar
 	}
 
 	static String getUrl(String url) {
+		// 检查 `url` 是否为非空且包含内容，并且不是表达式格式（例如 `#{...}`）
 		if (StringUtils.hasText(url) && !(url.startsWith("#{") && url.contains("}"))) {
-			if (!url.contains("://")) {
+			if (!url.contains("://")) { // 如果 `url` 不包含协议（例如 `://`），默认加上 "http://"
 				url = "http://" + url;
 			}
-			try {
+			try {    // 尝试将 `url` 转换为 `URL` 对象，以验证其格式是否正确
 				new URL(url);
-			} catch (MalformedURLException e) {
+			} catch (MalformedURLException e) {// 如果 `url` 格式错误，抛出 `IllegalArgumentException` 异常，提示格式不合法
 				throw new IllegalArgumentException(url + " is malformed", e);
 			}
 		}
@@ -123,12 +124,12 @@ class FeignClientsRegistrar
 	}
 
 	static String getPath(String path) {
-		if (StringUtils.hasText(path)) {
+		if (StringUtils.hasText(path)) {  // 检查 `path` 是否非空并去掉首尾的空格
 			path = path.trim();
-			if (!path.startsWith("/")) {
+			if (!path.startsWith("/")) {  // 如果 `path` 不以 `/` 开头，给它加上前导的 `/`
 				path = "/" + path;
 			}
-			if (path.endsWith("/")) {
+			if (path.endsWith("/")) { // 如果 `path` 以 `/` 结尾，去掉尾部的 `/`
 				path = path.substring(0, path.length() - 1);
 			}
 		}
@@ -144,26 +145,62 @@ class FeignClientsRegistrar
 	public void registerBeanDefinitions(AnnotationMetadata metadata,
 										BeanDefinitionRegistry registry) {
 
-		// 注册配置 TODO 进入
+		// 注册默认配置 TODO 进入
 		registerDefaultConfiguration(metadata, registry);
 
 		// 注册 FeignClient TODO 进入
 		registerFeignClients(metadata, registry);
 	}
 
+
+	String getName(ConfigurableBeanFactory beanFactory, Map<String, Object> attributes) {
+		String name = (String) attributes.get("serviceId");// 首先尝试从 `attributes` 中获取 `serviceId` 属性的值
+		if (!StringUtils.hasText(name)) { // 如果 `serviceId` 为空或仅包含空格，则尝试获取 `name` 属性的值
+			name = (String) attributes.get("name");
+		}
+		if (!StringUtils.hasText(name)) { // 如果 `name` 也为空或仅包含空格，则尝试获取 `value` 属性的值
+			name = (String) attributes.get("value");
+		}
+		// 调用 `resolve` 方法，将 `name` 中的占位符和表达式进行解析
+		name = resolve(beanFactory, name);
+		return getName(name); // 调用 `getName(String)` 方法，进一步处理和返回最终的名称
+	}
+
+	private String getContextId(ConfigurableBeanFactory beanFactory,
+								Map<String, Object> attributes) {
+		String contextId = (String) attributes.get("contextId");
+		if (!StringUtils.hasText(contextId)) {
+			return getName(attributes);
+		}
+
+		contextId = resolve(beanFactory, contextId);
+		return getName(contextId);
+	}
+
+	/**
+	 *  定义一个私有方法 `registerDefaultConfiguration`，用于注册默认的 Feign 配置
+	 *  参数 `metadata` 包含 `@EnableFeignClients` 注解所在类的元数据
+	 *  参数 `registry` 是 Spring 的 `BeanDefinitionRegistry`，用于注册 Bean 定义
+	 * @param metadata
+	 * @param registry
+	 */
 	private void registerDefaultConfiguration(AnnotationMetadata metadata,
 											  BeanDefinitionRegistry registry) {
-
+		// 从 `metadata` 中获取 `@EnableFeignClients` 注解的属性值映射 `defaultAttrs`
+		// `true` 表示要检索注解的所有属性（包括继承的属性）
 		Map<String, Object> defaultAttrs = metadata
 			.getAnnotationAttributes(EnableFeignClients.class.getName(), true);
-
+		// 检查 `defaultAttrs` 是否不为 null 并且包含 `defaultConfiguration` 属性
+		// `defaultConfiguration` 属性用于指定 Feign 客户端的默认配置类
 		if (defaultAttrs != null && defaultAttrs.containsKey("defaultConfiguration")) {
 			String name;
-			if (metadata.hasEnclosingClass()) {
+			if (metadata.hasEnclosingClass()) { // 如果当前类是内部类，则将 `name` 设置为 "default." + 外部类的类名
 				name = "default." + metadata.getEnclosingClassName();
-			} else {
+			} else { // 否则，将 `name` 设置为 "default." + 当前类的类名
 				name = "default." + metadata.getClassName();
 			}
+			// 调用 `registerClientConfiguration` 方法，将默认配置注册到 `registry` 中
+			// 参数 `name` 用于生成 Bean 的名称，`defaultConfiguration` 指定了配置类
 			registerClientConfiguration(registry, name,
 				defaultAttrs.get("defaultConfiguration"));
 		}
@@ -176,40 +213,47 @@ class FeignClientsRegistrar
 		// 解析 @EnableFeginClient注解
 		Map<String, Object> attrs = metadata
 			.getAnnotationAttributes(EnableFeignClients.class.getName());
-		// 一般不会指明哪一些client 会指明一个包路径 让程序去扫描包下的接口 生成代理对象 注册到spring容器
+		// 获取 `clients` 属性值，如果存在，则直接使用；否则，`clients` 为空或为 null
+		// `clients` 数组用于指定具体的 Feign 客户端类
 		final Class<?>[] clients = attrs == null ? null
 			: (Class<?>[]) attrs.get("clients");
-		if (clients == null || clients.length == 0) {
-			// 得到 包扫描类 并将包含的规则设置到它的属性汇总
+		if (clients == null || clients.length == 0) {  // 如果 `clients` 为空，则意味着未指定具体类，需要基于包路径扫描找到候选类
+			// 得到 包扫描的工具类 并将包含的规则设置到它的属性汇总
+			// TODO 进入
 			ClassPathScanningCandidateComponentProvider scanner = getScanner();
+			// 设置资源加载器，用于加载资源和类文件
 			scanner.setResourceLoader(this.resourceLoader);
-			// 在new一个 AnnotationTypeFilter有一点多余 上面创建过
+			// 添加一个过滤器，仅包括带有 `@FeignClient` 注解的类
 			scanner.addIncludeFilter(new AnnotationTypeFilter(FeignClient.class));
+			// 获取 `basePackages` 集合，表示要扫描的基础包路径
 			Set<String> basePackages = getBasePackages(metadata);
-			// 遍历传入的保丽净 得到扫描之后的结果集合 设置到CandidateComponents
+			// 遍历 `basePackages` 中的每个包路径，将扫描到的候选组件添加到 `candidateComponents`
 			for (String basePackage : basePackages) {
 				candidateComponents.addAll(scanner.findCandidateComponents(basePackage));
 			}
 		} else {
+			// 如果指定了 `clients`，则直接将这些类作为候选组件添加到 `candidateComponents`
 			for (Class<?> clazz : clients) {
 				candidateComponents.add(new AnnotatedGenericBeanDefinition(clazz));
 			}
 		}
-
+		// 遍历 `candidateComponents`，处理每个候选组件，确保是 `AnnotatedBeanDefinition`
 		for (BeanDefinition candidateComponent : candidateComponents) {
 			if (candidateComponent instanceof AnnotatedBeanDefinition) {
 				// verify annotated class is an interface
+				// 将 `candidateComponent` 转换为 `AnnotatedBeanDefinition`
+				// 并获取其 `annotationMetadata`，用于读取注解元数据
 				AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
 				AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
 				// 检查client是否是接口 不是抛异常
 				Assert.isTrue(annotationMetadata.isInterface(),
 					"@FeignClient can only be specified on an interface");
-				// 得到client @FeignCLient 注解信息
+				// TODO 得到client @FeignCLient 注解信息
 				Map<String, Object> attributes = annotationMetadata
 					.getAnnotationAttributes(FeignClient.class.getCanonicalName());
-				// 得到client的name属性 如果@FeignClient上有设置的话
+				// 如果@FeignClient上有设置的话  得到client的name属性 标识该客户端名称
 				String name = getClientName(attributes);
-				// 得到client的configuration属性 如果@FeignClient上有设置的话 并注册到spring容器
+				// 如果@FeignClient上有设置的话  得到client的configuration属性  并注册到spring容器
 				registerClientConfiguration(registry, name,
 					attributes.get("configuration"));
 				//client注册核心 TODO 进入
@@ -309,28 +353,7 @@ class FeignClientsRegistrar
 		return getName(null, attributes);
 	}
 
-	String getName(ConfigurableBeanFactory beanFactory, Map<String, Object> attributes) {
-		String name = (String) attributes.get("serviceId");
-		if (!StringUtils.hasText(name)) {
-			name = (String) attributes.get("name");
-		}
-		if (!StringUtils.hasText(name)) {
-			name = (String) attributes.get("value");
-		}
-		name = resolve(beanFactory, name);
-		return getName(name);
-	}
 
-	private String getContextId(ConfigurableBeanFactory beanFactory,
-								Map<String, Object> attributes) {
-		String contextId = (String) attributes.get("contextId");
-		if (!StringUtils.hasText(contextId)) {
-			return getName(attributes);
-		}
-
-		contextId = resolve(beanFactory, contextId);
-		return getName(contextId);
-	}
 
 	/**
 	 * 定义一个方法用于解析字符串 `value`，支持 Spring 占位符和表达式解析
@@ -364,18 +387,23 @@ class FeignClientsRegistrar
 
 	private String getUrl(ConfigurableBeanFactory beanFactory,
 						  Map<String, Object> attributes) {
+		// TODO 进入
 		String url = resolve(beanFactory, (String) attributes.get("url"));
 		return getUrl(url);
 	}
 
 	private String getPath(ConfigurableBeanFactory beanFactory,
 						   Map<String, Object> attributes) {
+		// TODO 进入
 		String path = resolve(beanFactory, (String) attributes.get("path"));
 		return getPath(path);
 	}
 
 	/**
 	 * 返回一个 ClassPathScanningCandidateComponentProvider 的实例，用于扫描类路径下符合条件的候选组件
+	 *
+	 * ClassPathScanningCandidateComponentProvider 是 Spring Framework 中的一个实用类，用于在类路径中扫描符合特定条件的候选组件（Bean 定义）。
+	 * 它的主要功能是扫描类路径以找到符合条件的类或接口，并将它们作为候选组件注册到 Spring 容器中
 	 * @return
 	 */
 	protected ClassPathScanningCandidateComponentProvider getScanner() {
@@ -403,24 +431,29 @@ class FeignClientsRegistrar
 	}
 
 	protected Set<String> getBasePackages(AnnotationMetadata importingClassMetadata) {
+		// 从 `importingClassMetadata` 中获取 `EnableFeignClients` 注解的属性映射
 		Map<String, Object> attributes = importingClassMetadata
 			.getAnnotationAttributes(EnableFeignClients.class.getCanonicalName());
-
+		// 创建一个空的 `Set` 集合 `basePackages`，用于存储基础包路径
 		Set<String> basePackages = new HashSet<>();
+
+		//  // 将非空的 `value` 属性添加到 `basePackages` 中
 		for (String pkg : (String[]) attributes.get("value")) {
 			if (StringUtils.hasText(pkg)) {
 				basePackages.add(pkg);
 			}
 		}
+		// 将非空的 `basePackages` 属性添加到 `basePackages` 集合中
 		for (String pkg : (String[]) attributes.get("basePackages")) {
 			if (StringUtils.hasText(pkg)) {
 				basePackages.add(pkg);
 			}
 		}
+		// 从 `basePackageClasses` 中获取每个类的包名，并添加到 `basePackages`
 		for (Class<?> clazz : (Class[]) attributes.get("basePackageClasses")) {
 			basePackages.add(ClassUtils.getPackageName(clazz));
 		}
-
+		// 如果未提供任何包信息，默认使用 `@EnableFeignClients` 注解所在类的包名
 		if (basePackages.isEmpty()) {
 			basePackages.add(
 				ClassUtils.getPackageName(importingClassMetadata.getClassName()));
@@ -429,13 +462,16 @@ class FeignClientsRegistrar
 	}
 
 	private String getQualifier(Map<String, Object> client) {
-		if (client == null) {
+		if (client == null) {// 如果 `client` 为 null，直接返回 null
 			return null;
 		}
+		// 获取 `client` 中的 `qualifier` 属性值
 		String qualifier = (String) client.get("qualifier");
+		// 如果 `qualifier` 非空且包含文本内容，返回该值
 		if (StringUtils.hasText(qualifier)) {
 			return qualifier;
 		}
+		// 如果 `qualifier` 为空或没有文本内容，返回 null
 		return null;
 	}
 
