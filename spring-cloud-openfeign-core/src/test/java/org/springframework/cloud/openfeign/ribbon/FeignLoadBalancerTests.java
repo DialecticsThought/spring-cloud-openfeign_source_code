@@ -180,9 +180,9 @@ public class FeignLoadBalancerTests {
 
 		feignLoadBalancer = new FeignLoadBalancer(baseLoadBalancer, config, inspector) {
 			protected void customizeLoadBalancerCommandBuilder(
-					final FeignLoadBalancer.RibbonRequest request,
+					final RibbonRequest request,
 					final IClientConfig config,
-					final LoadBalancerCommand.Builder<FeignLoadBalancer.RibbonResponse> builder) {
+					final LoadBalancerCommand.Builder<RibbonResponse> builder) {
 				builder.withServerLocator(request.getRequest().headers().get("c_ip"));
 			}
 		};

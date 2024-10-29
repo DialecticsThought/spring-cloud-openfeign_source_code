@@ -39,10 +39,10 @@ import org.springframework.context.annotation.Configuration;
  * @author Olga Maciaszek-Sharma
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnMissingBean(okhttp3.OkHttpClient.class)
+@ConditionalOnMissingBean(OkHttpClient.class)
 public class OkHttpFeignConfiguration {
 
-	private okhttp3.OkHttpClient okHttpClient;
+	private OkHttpClient okHttpClient;
 
 	@Bean
 	@ConditionalOnMissingBean(ConnectionPool.class)
@@ -56,7 +56,7 @@ public class OkHttpFeignConfiguration {
 	}
 
 	@Bean
-	public okhttp3.OkHttpClient client(OkHttpClientFactory httpClientFactory,
+	public OkHttpClient client(OkHttpClientFactory httpClientFactory,
 			ConnectionPool connectionPool,
 			FeignHttpClientProperties httpClientProperties) {
 		Boolean followRedirects = httpClientProperties.isFollowRedirects();

@@ -52,7 +52,7 @@ public class EnableFeignClientsTests {
 	public void setUp() {
 		context = new SpringApplicationBuilder().web(WebApplicationType.NONE)
 				.properties("debug=true", "feign.httpclient.enabled=false")
-				.sources(EnableFeignClientsTests.PlainConfiguration.class).run();
+				.sources(PlainConfiguration.class).run();
 	}
 
 	@After

@@ -40,7 +40,7 @@ public class FeignBuilderCustomizerTests {
 	@Test
 	public void testBuilderCustomizer() {
 		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
-				FeignBuilderCustomizerTests.SampleConfiguration2.class);
+				SampleConfiguration2.class);
 
 		FeignClientFactoryBean clientFactoryBean = context
 				.getBean(FeignClientFactoryBean.class);
@@ -66,7 +66,7 @@ public class FeignBuilderCustomizerTests {
 	@Test
 	public void testBuildCustomizerOrdered() {
 		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
-				FeignBuilderCustomizerTests.SampleConfiguration3.class);
+				SampleConfiguration3.class);
 
 		FeignClientFactoryBean clientFactoryBean = context
 				.getBean(FeignClientFactoryBean.class);
@@ -82,7 +82,7 @@ public class FeignBuilderCustomizerTests {
 	@Test
 	public void testBuildCustomizerOrderedWithAdditional() {
 		AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
-				FeignBuilderCustomizerTests.SampleConfiguration3.class);
+				SampleConfiguration3.class);
 
 		FeignClientFactoryBean clientFactoryBean = context
 				.getBean(FeignClientFactoryBean.class);

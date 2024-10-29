@@ -24,7 +24,7 @@ package org.springframework.cloud.openfeign.encoding.proto;
  */
 public final class Request extends com.google.protobuf.GeneratedMessageV3 implements
 		// @@protoc_insertion_point(message_implements:Request)
-		org.springframework.cloud.openfeign.encoding.proto.RequestOrBuilder {
+		RequestOrBuilder {
 
 	public static final int ID_FIELD_NUMBER = 1;
 
@@ -108,7 +108,7 @@ public final class Request extends com.google.protobuf.GeneratedMessageV3 implem
 	}
 
 	public static com.google.protobuf.Descriptors.Descriptor getDescriptor() {
-		return org.springframework.cloud.openfeign.encoding.proto.ProtobufTest.internal_static_Request_descriptor;
+		return ProtobufTest.internal_static_Request_descriptor;
 	}
 
 	public static Request parseFrom(java.nio.ByteBuffer data)
@@ -203,8 +203,8 @@ public final class Request extends com.google.protobuf.GeneratedMessageV3 implem
 	}
 
 	protected FieldAccessorTable internalGetFieldAccessorTable() {
-		return org.springframework.cloud.openfeign.encoding.proto.ProtobufTest.internal_static_Request_fieldAccessorTable
-				.ensureFieldAccessorsInitialized(Request.class, Request.Builder.class);
+		return ProtobufTest.internal_static_Request_fieldAccessorTable
+				.ensureFieldAccessorsInitialized(Request.class, Builder.class);
 	}
 
 	/**
@@ -350,7 +350,7 @@ public final class Request extends com.google.protobuf.GeneratedMessageV3 implem
 	public static final class Builder
 			extends com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
 			// @@protoc_insertion_point(builder_implements:Request)
-			org.springframework.cloud.openfeign.encoding.proto.RequestOrBuilder {
+			RequestOrBuilder {
 
 		private int id_;
 
@@ -368,13 +368,13 @@ public final class Request extends com.google.protobuf.GeneratedMessageV3 implem
 		}
 
 		public static com.google.protobuf.Descriptors.Descriptor getDescriptor() {
-			return org.springframework.cloud.openfeign.encoding.proto.ProtobufTest.internal_static_Request_descriptor;
+			return ProtobufTest.internal_static_Request_descriptor;
 		}
 
 		protected FieldAccessorTable internalGetFieldAccessorTable() {
-			return org.springframework.cloud.openfeign.encoding.proto.ProtobufTest.internal_static_Request_fieldAccessorTable
+			return ProtobufTest.internal_static_Request_fieldAccessorTable
 					.ensureFieldAccessorsInitialized(Request.class,
-							Request.Builder.class);
+							Builder.class);
 		}
 
 		private void maybeForceBuilderInitialization() {
@@ -391,7 +391,7 @@ public final class Request extends com.google.protobuf.GeneratedMessageV3 implem
 		}
 
 		public com.google.protobuf.Descriptors.Descriptor getDescriptorForType() {
-			return org.springframework.cloud.openfeign.encoding.proto.ProtobufTest.internal_static_Request_descriptor;
+			return ProtobufTest.internal_static_Request_descriptor;
 		}
 
 		public Request getDefaultInstanceForType() {
