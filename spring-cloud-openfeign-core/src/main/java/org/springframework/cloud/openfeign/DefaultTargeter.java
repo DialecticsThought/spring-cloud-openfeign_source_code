@@ -40,6 +40,7 @@ class DefaultTargeter implements Targeter {
 		 *  Feign.Builder.build方法中有使用this.invocationHandlerFactory = new InvocationHandlerFactory.Default();
 		 *  查看InvocationHandlerFactory类的内部的Default类
 		 * </pre>
+		 *
 		 * <pre>
 		 * TODO
 		 *  SynchronousMethodHandler很重要  需要查看SynchronousMethodHandler#executeAndDecode()方法☆☆☆☆☆☆☆☆☆☆☆☆☆☆
@@ -48,8 +49,6 @@ class DefaultTargeter implements Targeter {
 		 *  查看LoadBalancerFeignClient.execute
 		 * </pre>
 		 * 注：
-		 *
-		 *
 		 * ReflectiveFeign 做的工作就是为带有 @FeignClient 注解的接口，创建出接口方法的动态代理对象。
 		 *  1.解析 FeignClient 接口上各个方法级别的注解，比如远程接口的 URL、接口类型（Get、Post 等）、各个请求参数等。
 		 *  这里用到了 MVC Contract 协议解析，后面会讲到。

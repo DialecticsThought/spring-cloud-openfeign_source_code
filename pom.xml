@@ -133,6 +133,7 @@
 		<module>spring-cloud-openfeign-core</module>
 		<module>spring-cloud-starter-openfeign</module>
 		<module>docs</module>
+		<module>feign-core-10.2.3-self</module>
 	</modules>
 	<profiles>
 		<profile>

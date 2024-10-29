@@ -1,0 +1,2 @@
+Summary for feign-core-10.2.3.jar
+Decompiled with CFR 0.152
