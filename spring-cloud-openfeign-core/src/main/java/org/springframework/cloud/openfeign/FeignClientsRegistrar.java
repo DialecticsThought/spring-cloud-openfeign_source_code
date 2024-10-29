@@ -263,40 +263,80 @@ class FeignClientsRegistrar
 		}
 	}
 
+	/**
+	 * TODO
+	 *  将 Feign 客户端（封装为 FeignClientFactoryBean 对象）注册到 Spring 容器中
+	 *  它扫描指定的接口，将其注册为 Spring 容器中的一个 Bean。
+	 * @param registry
+	 * @param annotationMetadata  Bean 定义注册表
+	 * @param attributes  注解元数据
+	 */
 	private void registerFeignClient(BeanDefinitionRegistry registry,
 									 AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
+		// 获取当前被 @FeignClient 注解的接口的完整类名
 		String className = annotationMetadata.getClassName();
-		/**
-		 * 实际上往 spring容器 中 注册的是 FeignClientFactoryBean对象 即 factoryBean
-		 * 并设置beanClass 为 client接口的class 查看FeignClientFactoryBean.getBean()方法 TODO
-		 */
+		// 使用 `ClassUtils` 根据类名加载类，将其转换为 `Class` 对象
 		Class clazz = ClassUtils.resolveClassName(className, null);
+		// 如果 `registry` 是 `ConfigurableBeanFactory` 的实例，将其赋值给 `beanFactory`
+		// 这样可以访问 Spring Bean 的配置和解析功能
 		ConfigurableBeanFactory beanFactory = registry instanceof ConfigurableBeanFactory
 			? (ConfigurableBeanFactory) registry : null;
+		// 获取 `contextId`，用于唯一标识该 Feign 客户端实例
 		String contextId = getContextId(beanFactory, attributes);
+		// 获取 Feign 客户端的 `name` 属性，代表该客户端的名称 eg:user-service
 		String name = getName(attributes);
+		// 创建一个 `FeignClientFactoryBean` 实例，用于生成 Feign 客户端代理
+		// TODO 查看该类
+		/**
+		 * <pre>
+		 *    eg:
+		 * 		@FeignClient(name = "user-service", url = "http://user-service.com/api")
+		 * 		public interface UserServiceClient {
+		 * 		    @GetMapping("/users/{id}")
+		 * 		    User getUserById(@PathVariable("id") Long id);
+		 * 		}
+		 * 	  在这个例子中：
+		 * 	  	@FeignClient 注解指定了 name 和 url：
+		 * 	  	name = "user-service"：定义了客户端的服务名。
+		 * 	  	url = "http://user-service.com/api"：指定了服务的基础 URL。
+		 * 	  	getUserById 方法是一个 HTTP GET 请求，路径为 /users/{id}，用于获取指定 ID 的用户信息。
+		 *
+		 * 	  Spring 会根据这个接口生成一个代理对象，通过该代理对象调用 getUserById 方法时，
+		 * 	  	它会自动生成 HTTP 请求，调用 http://user-service.com/api/users/{id}，并将响应数据映射为 User 对象
+		 *
+		 * 	  FeignClientFactoryBean 的作用
+		 * 	  	在 registerFeignClient 方法中，FeignClientFactoryBean 是一个工厂 Bean，用于生成 UserServiceClient 的代理对象。
+		 * 	  	这个工厂 Bean 封装了 Feign 客户端的创建过程，包含了 @FeignClient 注解中的配置，如 name、url、降级策略等。
+		 * </pre>
+		 */
 		FeignClientFactoryBean factoryBean = new FeignClientFactoryBean();
+		// 将 `beanFactory` 设置为 `FeignClientFactoryBean` 的 `BeanFactory`
 		factoryBean.setBeanFactory(beanFactory);
+		// 将 `name` 和 `contextId` 属性分别设置到 `FeignClientFactoryBean`
 		factoryBean.setName(name);
 		factoryBean.setContextId(contextId);
+		// 将 `clazz`（Feign 客户端接口的 Class 对象）设置为 `FeignClientFactoryBean` 的类型
 		factoryBean.setType(clazz);
+		// 创建 `BeanDefinitionBuilder`，并设置回调生成 `FeignClientFactoryBean` 的对象
 		BeanDefinitionBuilder definition = BeanDefinitionBuilder
 			.genericBeanDefinition(clazz, () -> {
-
+				// 设置 `factoryBean` 的 `url` 属性，用于直接访问指定的 URL
 				factoryBean.setUrl(getUrl(beanFactory, attributes));
-
+				// 设置 `factoryBean` 的 `path` 属性，用于设置基础路径
 				factoryBean.setPath(getPath(beanFactory, attributes));
-
+				// 设置 `decode404` 属性，如果为 true 表示当返回 404 状态码时，Feign 会尝试解码响应
 				factoryBean.setDecode404(Boolean
 					.parseBoolean(String.valueOf(attributes.get("decode404"))));
-
+				// 如果配置了 `fallback`，将其解析为 `Class` 对象并设置到 `factoryBean`
+				// 该类用于指定当调用失败时的回退实现
 				Object fallback = attributes.get("fallback");
 				if (fallback != null) {
 					factoryBean.setFallback(fallback instanceof Class
 						? (Class<?>) fallback
 						: ClassUtils.resolveClassName(fallback.toString(), null));
 				}
-
+				// 如果配置了 `fallbackFactory`，将其解析为 `Class` 对象并设置到 `factoryBean`
+				// 该类用于指定生成回退实例的工厂类
 				Object fallbackFactory = attributes.get("fallbackFactory");
 				if (fallbackFactory != null) {
 					factoryBean.setFallbackFactory(fallbackFactory instanceof Class
@@ -306,24 +346,29 @@ class FeignClientsRegistrar
 				}
 				return factoryBean.getObject();
 			});
+		// 设置自动注入模式为按类型注入
 		definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
+		// 设置该 Bean 为延迟初始化
 		definition.setLazyInit(true);
+		// 调用 `validate` 方法，校验 `attributes` 中的相关配置是否合法
 		validate(attributes);
-
+		// 通过 `definition` 获取 `AbstractBeanDefinition` 对象
 		AbstractBeanDefinition beanDefinition = definition.getBeanDefinition();
+		// 设置 `beanDefinition` 的属性，指定对象类型和 `feignClientsRegistrarFactoryBean`
 		beanDefinition.setAttribute(FactoryBean.OBJECT_TYPE_ATTRIBUTE, className);
 		beanDefinition.setAttribute("feignClientsRegistrarFactoryBean", factoryBean);
 
 		// has a default, won't be null
+		// 获取 `primary` 属性（默认值），决定该 Bean 是否为主要候选者
 		boolean primary = (Boolean) attributes.get("primary");
-
+		// 设置 `beanDefinition` 的 `primary` 属性
 		beanDefinition.setPrimary(primary);
-
+		// 获取限定符（qualifiers），如果为空，则默认使用 `contextId + "FeignClient"`
 		String[] qualifiers = getQualifiers(attributes);
 		if (ObjectUtils.isEmpty(qualifiers)) {
 			qualifiers = new String[]{contextId + "FeignClient"};
 		}
-
+		// 创建 `BeanDefinitionHolder`，用于将 `beanDefinition` 和限定符绑定到 `className`
 		BeanDefinitionHolder holder = new BeanDefinitionHolder(beanDefinition, className,
 			qualifiers);
 		// 将FeignClientFactoryBean 对象注册到容器
